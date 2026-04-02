@@ -1,0 +1,28 @@
+{
+  "name": "void-survivor",
+  "version": "1.0.0",
+  "description": "Browser space game — mining, wave combat, ship upgraes. Play in any browser, no install needed.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solitud1nem/void-survivor.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/solitud1nem/void-survivor/issues"
+  },
+  "homepage": "https://github.com/solitud1nem/void-survivor#readme",
+  "devDependencies": {
+    "vite": "^8.0.3"
+  },
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}
