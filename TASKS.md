@@ -1,121 +1,177 @@
 # TASKS.md — Void Survivor v6
 
-> Используй как очередь для Claude Code.  
-> Одна задача = одна сессия Claude Code (~1-2 часа).  
-> Начинай каждую сессию: "Read AGENTS.md, PRD.md, PLANNING.md. Current task: [задача]"  
+> Одна задача = одна сессия Claude Code.
+> Начинай: "Read AGENTS.md, PRD.md, PLANNING.md. Current task: [задача]"
 > После завершения ставь [x].
 
 ---
 
-## Milestone 0: Критический баг — карта сбрасывается при level up
+## ✅ ЗАКРЫТО
 
-- [x] **M0-1** (Simple) — ~~Разделить `spawnWave(w)` на две функции~~ → Волны полностью убраны, непрерывный спавн
-
----
-
-## Milestone 1: Extraction Mode
-
-- [x] **M1-1** — `initExtraction()`, зона с `{ x, y, radius: 80 }`
-- [x] **M1-2** — Рендер: пульсирующий зелёный круг, надпись "EXTRACT", точка на мини-карте
-- [x] **M1-3** — HUD: таймер (белый→оранжевый→красный), стрелка к зоне, WARNING при < 60 сек
-- [x] **M1-4** — Логика зоны: прогресс-бар "EXTRACTING", triggerSuccess/triggerFailed
-- [x] **M1-5** — Экраны SUCCESS (зелёный) и FAILED (красный, ore lost, XP -50%)
-- [x] **M1-6** — 4 типа локаций: Abandoned Field / Contested Zone / Rich Vein / Void Storm
+- [x] M3-1 — Vite инициализирован (src/main.js, npm run dev работает)
+- [x] Extraction Mode (зона, таймер, SUCCESS/FAILED, 4 типа локаций)
+- [x] Система боссов (Harbinger, Colossus, Phantom Wraith)
+- [x] Баг map reset при level up (не воспроизводится в v6)
 
 ---
 
-## Milestone 2: Система боссов
+## 🔧 REFACTOR SPRINT — сначала это
 
-- [x] **M2-base** — Базовая система боссов:
-  - Рандомный спавн (4% шанс за тик), max 2 за вылазку, max 1 одновременно
-  - Красный вращающийся шестиугольник, HP 500, преследует игрока
-  - Стреляет красными пулями в позицию игрока каждые 2 сек
-  - Boss HP bar сверху экрана
-  - Дроп: 5-10 руды + XP gems
-  - Красная точка на мини-карте
+> Цель: разбить src/main.js (~2000 строк) на модули.
+> После каждого шага: npm run dev, проверить что игра работает.
+> Не переходить к следующему шагу если предыдущий сломал что-то.
 
-- [ ] **M2-next** — Расширение боссов (backlog):
-  - Разные типы боссов с уникальными атаками
-  - Расширенный набор оружия у боссов
-  - Уникальные спрайты для каждого типа
+- [ ] **R1** (Simple) — Вынести `src/config.js`
+  - Все константы верхнего уровня: WW, WH, SPAWN_RADIUS, SCAN_MAX, ORE_VALUE, LOCATIONS и т.д.
+  - Экспортировать: `export const WW = 2400` и т.д. (named exports)
+  - В main.js: `import { WW, WH, SCAN_MAX, ... } from './config.js'`
+  - Проверка: npm run dev, игра запускается, константы работают
 
----
+- [ ] **R2** (Simple) — Вынести `src/state.js`
+  - Функция `mkG()` — создаёт и возвращает начальное состояние G
+  - Экспортировать: `export { mkG }`
+  - META объект (накопительный прогресс) — тоже сюда
+  - В main.js: `import { mkG } from './state.js'; let G = mkG()`
+  - Проверка: npm run dev, новая игра стартует корректно
 
-## Milestone 3: Vite миграция
+- [ ] **R3** (Medium) — Вынести `src/world.js`
+  - Функции генерации мира: `genWorldForWave()`, `genObstacles()`, `genNebulae()`
+  - Принимают `(G, config)` как параметры — не используют глобалы
+  - Экспортировать: `export { genWorldForWave }`
+  - Проверка: npm run dev, карта генерируется при старте рана
 
-- [ ] **M3-1** (Simple) — Инициализировать Vite проект:
-  - `npm create vite@latest void-survivor -- --template vanilla`
-  - Скопировать текущий `index.html` как отправную точку
-  - Убедиться что `npm run dev` запускается
+- [ ] **R4** (Medium) — Вынести `src/enemies.js`
+  - `spawnEnemies()`, `updateEnemies()`, `resetEnemyQueue()`
+  - Принимают `(G, dt, config)` как параметры
+  - Экспортировать: `export { spawnEnemies, updateEnemies, resetEnemyQueue }`
+  - Проверка: враги спавнятся и двигаются корректно
 
-- [ ] **M3-2** (Medium) — Создать `src/config.js` и `src/state.js`:
-  - Вынести все константы из монолита в `config.js`
-  - Вынести объект `G` в `state.js`
-  - Убедиться что игра запускается после
+- [ ] **R5** (Medium) — Вынести `src/render.js`
+  - Все функции: `draw*()`, `_draw*()`, `renderHUD()`, `renderMinimap()`, `renderEffects()`
+  - Главная точка входа: `export function drawFrame(G, C, cam, config)`
+  - Не трогает G напрямую — только читает для рендера
+  - Проверка: npm run dev, вся графика работает как прежде
 
-- [ ] **M3-3** (Medium) — Вынести `src/game/world.js`:
-  - `genWorld()`, `genObstacles()`, логика препятствий
+- [ ] **R6** (Medium) — Вынести `src/web3.js`
+  - `w3Init()`, `connectWallet()`, `buyOre()`, `getOreBalance()`, W3_CFG, ABI
+  - Не знает об объекте G — только принимает параметры, возвращает результаты
+  - Экспортировать: `export { w3Init, connectWallet, buyOre, W3_CFG }`
+  - В main.js: `import { w3Init, connectWallet } from './web3.js'`
+  - Проверка: Connect Wallet работает, покупка ore работает на Sepolia
 
-- [ ] **M3-4** (Medium) — Вынести `src/game/enemies.js`, `src/game/bosses.js` и `src/game/player.js`
-
-- [ ] **M3-5** (Medium) — Вынести `src/render/renderer.js`, `src/render/hud.js`, `src/render/minimap.js`
-
-- [ ] **M3-6** (Medium) — Вынести `src/web3/wallet.js`, `src/web3/contract.js`
-
-- [ ] **M3-7** (Simple) — Проверить финальный билд:
-  - `npm run build` → `dist/index.html` работает без сервера
-  - Все фичи работают: web3, mining, extraction, боссы
-
----
-
-## Milestone 4: Cloudflare Workers + D1 Бэкенд
-
-- [ ] **M4-1** (Simple) — Создать Cloudflare Workers проект:
-  - `wrangler init workers`
-  - Создать `wrangler.toml` с D1 binding
-
-- [ ] **M4-2** (Simple) — Применить D1 схему:
-  - `wrangler d1 create void-survivor-db`
-  - `wrangler d1 execute void-survivor-db --file workers/schema.sql`
-
-- [ ] **M4-3** (Medium) — Реализовать `POST /api/save-run`:
-  - Принять `{ run, signature }`, верифицировать EIP-191 подпись
-  - Записать в таблицу `runs`, обновить `players`
-  - Вернуть `{ ok: true, rank }`
-
-- [ ] **M4-4** (Simple) — Реализовать `GET /api/leaderboard`:
-  - TOP-10 по `ore_total` из таблицы `players`
-  - Кэшировать 60 сек (`Cache-Control: max-age=60`)
-
-- [ ] **M4-5** (Medium) — Интеграция в игру:
-  - `src/web3/backend.js`: `saveRun()` вызывается при SUCCESS
-  - Подпись: `await wallet.signMessage(JSON.stringify(runData))`
-  - При ошибке — тихо пропускаем (не блокируем геймплей)
-
-- [ ] **M4-6** (Medium) — Экран лидерборда в игре:
-  - Новый экран `phase = 'leaderboard'`
-  - Кнопка "Leaderboard" в главном меню
-  - Загрузка из API, отображение топ-10 (адрес сокращённый + ore)
+  > После R1–R6 main.js должен содержать только:
+  > game loop, update логику, input handlers — ~600–800 строк.
+  > Целевая структура:
+  > src/config.js  ~80 строк
+  > src/state.js   ~100 строк
+  > src/world.js   ~200 строк
+  > src/enemies.js ~250 строк
+  > src/render.js  ~600 строк
+  > src/web3.js    ~200 строк
+  > src/main.js    ~600 строк (game loop + input)
 
 ---
 
-## Milestone 5: Cloudflare Pages деплой
+## 🎮 GAMEPLAY SPRINT — после рефакторинга
 
-- [ ] **M5-1** (Simple) — Создать Cloudflare Pages проект:
-  - `wrangler pages project create void-survivor`
-  - Настроить: Build command `npm run build`, Output dir `dist`
+> Цель: довести геймплей до уровня когда не стыдно показать людям.
+> Инфра (Workers, D1, Mainnet) — после этого спринта.
 
-- [ ] **M5-2** (Simple) — Настроить CI: push to `main` → автодеплой
+### Milestone G1: Tension (игрок должен уворачиваться)
 
-- [ ] **M5-3** (Simple) — Обновить ссылки в README, Twitter (после домена)
+- [ ] **G1-1** (Medium) — Враги стреляют: система G.eBuls
+  - Отдельный массив вражеских пуль: `G.eBuls = []`
+  - Каждый враг стреляет в позицию игрока В МОМЕНТ выстрела (не leading)
+  - seek: cooldown 2500мс, дальность 300, урон 8, цвет #ff4444
+  - heavy: cooldown 1800мс, дальность 250, урон 14, цвет #ff8800
+  - fast: cooldown 3500мс, дальность 200, урон 5, цвет #cc44ff
+  - Рендер в render.js: маленькие кружки в цвете врага, лёгкий glow
+  - Коллизия с игроком в enemies.js: стандартная
+  - Проверка: враги стреляют, игрок получает урон от их пуль
+
+- [ ] **G1-2** (Simple) — Fullscreen кнопка
+  - Кнопка ⛶ рисуется на Canvas в правом нижнем углу (в render.js)
+  - CV.requestFullscreen() по клику на эту область (в main.js input handler)
+  - При fullscreenchange: Canvas 100vw/100vh, maxWidth: none
+  - Escape: приоритет — сначала fullscreen, потом пауза
+  - Проверка: кнопка разворачивает и сворачивает, пауза работает независимо
 
 ---
 
-## Backlog (не в этом спринте)
+### Milestone G2: Feel (каждое действие ощущается)
 
-- [ ] Вражеские пули (`G.eBuls` система) — из PRD v1.2 UX
-- [ ] Damage numbers + weapon trails
-- [ ] Анимация смерти (debris particles)
-- [ ] Base Mainnet деплой VoidOreMinter
-- [ ] Fullscreen кнопка
-- [ ] Twitter/devlog автоматизация
+- [ ] **G2-1** (Simple) — Damage numbers
+  - `G.dmgNums = []` — массив `{ x, y, val, life, vy }` — в state.js
+  - При попадании: push в enemies.js
+  - Рендер и update в render.js: `n.y -= n.vy; n.life -= dt/800`
+  - Размер: `10 + val/10`px, globalAlpha = n.life, цвет белый
+  - Проверка: цифры вылетают вверх и исчезают при попадании
+
+- [ ] **G2-2** (Medium) — Weapon trails
+  - Каждая пуля хранит `b.trail = []` — последние 20 позиций
+  - Обновление в main.js (game loop): `b.trail.push({x,y}); if > 20 shift()`
+  - Рендер в render.js: gradient fade, `globalAlpha = (i/trail.length)*0.4`
+  - Цвет по типу оружия
+  - Проверка: за пулями тянется светящийся след
+
+- [ ] **G2-3** (Medium) — Цветные искры + экран смерти
+  - Искры при ударе об астероид (enemies.js): poor=#888899, medium=#ffaa44, rich=#44ffaa
+  - Смерть: `G.debris = []` — 18 обломков, 2.5 сек анимация + camera zoom out
+  - Game Over экран — только после окончания анимации
+  - Проверка: искры работают; корабль красиво разлетается при гибели
+
+---
+
+### Milestone G3: Depth (реиграбельность)
+
+- [ ] **G3-1** (Medium) — Биомы волн
+  - 4 типа в config.js: asteroid_belt / void_storm / siege_wave / swarm
+  - Влияет на spawnEnemies() в enemies.js и genWorldForWave() в world.js
+  - `G.biome` — текущий биом, устанавливается в начале каждой волны
+  - Баннер в render.js: название биома по центру, 2 сек
+  - Проверка: волны ощутимо разные по составу врагов и окружению
+
+- [ ] **G3-2** (Medium) — Weapon synergies
+  - Логика синергий в main.js (при подборе оружия): `G.synergy = checkSynergy(G.weapons)`
+  - 4 комбинации: Pulse+Chain, Orbit+Scatter, Chain+Scatter, Pulse+Orbit
+  - Эффекты применяются в game loop при стрельбе/попадании
+  - Индикатор в render.js: небольшой текст на HUD под оружиями
+  - Проверка: Pulse + Chain → Bolt Arc активируется и работает
+
+---
+
+### Milestone G4: Polish (лоск)
+
+- [ ] **G4-1** (Simple) — Engine glow
+  - `vel = Math.hypot(s.vx, s.vy); fl = 0.3 + min(0.7, vel/4)`
+  - Передаётся в функцию рисования корабля в render.js
+  - Проверка: при быстром движении выхлоп заметно ярче
+
+- [ ] **G4-2** (Simple) — Анимированные туманности
+  - В world.js или render.js: `n.pulse += dt * 0.0005`
+  - scale = `1 + 0.05 * sin(n.pulse)`, лёгкий drift позиции
+  - Проверка: туманности дышат, не дёргаются
+
+---
+
+## 🏗️ INFRA SPRINT — после геймплей-спринта
+
+- [ ] M4-1 — Cloudflare Workers + wrangler.toml
+- [ ] M4-2 — D1 схема (players, runs)
+- [ ] M4-3 — POST /api/save-run с EIP-191 верификацией
+- [ ] M4-4 — GET /api/leaderboard
+- [ ] M4-5 — Интеграция save-run в игру (при SUCCESS)
+- [ ] M4-6 — Экран лидерборда в игре
+- [ ] M5-1 — Cloudflare Pages деплой
+- [ ] M5-2 — CI: push to main → автодеплой
+
+---
+
+## 📋 BACKLOG
+
+- [ ] Base Mainnet деплой VoidOreMinter (после Slither)
+- [ ] NFT корабли VoidShips.sol (ERC-721)
+- [ ] WebSocket мультиплеер (Durable Objects)
+- [ ] Сезонная система VoidSeason.sol
+- [ ] Мобильный Capacitor wrapper
+- [ ] PvP арены с entry fee
