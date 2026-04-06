@@ -1,8 +1,8 @@
 // ── Canvas ─────────────────────────────────────────────
-export const W = 600, H = 600;
+export const W = 960, H = 540;
 
 // ── World ──────────────────────────────────────────────
-export const WW  = 2400, WH = 2400;
+export const WW  = 3600, WH = 3600;
 export const WSX = WW/2, WSY = WH/2;
 export const SPAWN_RADIUS  = 380;
 export const SCAN_RADIUS   = 420;
@@ -74,6 +74,13 @@ export const ENEMY_CFG = {
   seek:  { hp:42,  spd:1.4,  pts:10, xp:8,  r:12 },
   heavy: { hp:155, spd:0.62, pts:40, xp:28, r:19 },
   fast:  { hp:24,  spd:2.55, pts:18, xp:12, r:8  },
+};
+
+// ── Enemy fire config ──────────────────────────────────
+export const ENEMY_FIRE = {
+  seek:  { cooldown:2500, range:300, dmg:8,  spd:3.0, col:'#ff4444', r:3 },
+  heavy: { cooldown:1800, range:250, dmg:14, spd:2.5, col:'#ff8800', r:4 },
+  fast:  { cooldown:3500, range:200, dmg:5,  spd:4.0, col:'#cc44ff', r:2.5 },
 };
 
 // ── Spawn / Boss ───────────────────────────────────────

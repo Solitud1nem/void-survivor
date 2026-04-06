@@ -6,7 +6,7 @@ import { META, saveMeta } from './state.js';
 
 // ── Module-level refs ─────────────────────────────────
 let C;
-let G, mX, mY, bR, hovI, shopSel;
+let G, mX, mY, bR, hovI, shopSel, _dt;
 let w3DrawToast, w3DrawConnectBtn, w3DrawShopPanel;
 let ptcl;
 
@@ -233,7 +233,7 @@ function drawScanUI() {
 
 // ─── Мини-карта ────────────────────────────────────────
 function drawMinimap() {
-  const mx=W-106, my=H-106, mw=96, mh=96;
+  const mw=192, mh=192, mx=W-mw-10, my=H-mh-10;
   const sx=WW/mw, sy=WH/mh;
 
   rRect(mx-2,my-2,mw+4,mh+4,4);
@@ -515,8 +515,50 @@ function drawOrbs() {
 function drawGems(t) {
   G.gems.forEach(g=>{if(!isVis(g.x,g.y))return;C.save();C.translate(wx(g.x),wy(g.y));C.rotate(t*0.002+g.ph);C.globalAlpha=Math.min(1,g.life*5);const s=g.r;C.fillStyle='rgba(40,200,110,.18)';C.beginPath();C.arc(0,0,s+3,0,Math.PI*2);C.fill();C.fillStyle=g.val>20?'#44ffaa':g.val>10?'#22ee66':'#11cc44';C.beginPath();C.moveTo(0,-s);C.lineTo(s*.68,0);C.lineTo(0,s);C.lineTo(-s*.68,0);C.closePath();C.fill();C.fillStyle=g.val>20?'#99ffdd':g.val>10?'#77ffaa':'#55ff88';C.beginPath();C.moveTo(0,-s*.55);C.lineTo(s*.4,0);C.lineTo(0,s*.55);C.lineTo(-s*.4,0);C.closePath();C.fill();C.fillStyle='rgba(255,255,255,.55)';C.beginPath();C.ellipse(-s*.1,-s*.22,s*.22,s*.13,-.3,0,Math.PI*2);C.fill();C.globalAlpha=1;C.restore();});
 }
+function drawDebris() {
+  if (!G.debris||G.debris.length===0) return;
+  G.debris.forEach(d=>{
+    if (!isVis(d.x,d.y,20)) return;
+    C.save();C.translate(wx(d.x),wy(d.y));C.rotate(d.rot);
+    C.globalAlpha=d.life;C.fillStyle=d.col;
+    C.fillRect(-d.sz/2,-d.sz/2,d.sz,d.sz*0.6);
+    C.restore();
+  });
+  C.globalAlpha=1;
+}
+
+function drawTrails() {
+  const cols={pulse:'#55aaff',scatter:'#ffaa33'};
+  G.buls.forEach(b=>{
+    if (!b.trail||b.trail.length<2) return;
+    const col=cols[b.tp]||'#ffffff';
+    for (let i=1;i<b.trail.length;i++) {
+      const p0=b.trail[i-1], p1=b.trail[i];
+      if (!isVis(p1.x,p1.y,20)) continue;
+      C.globalAlpha=(i/b.trail.length)*0.35;
+      C.strokeStyle=col;C.lineWidth=1+i/b.trail.length*2;
+      C.beginPath();C.moveTo(wx(p0.x),wy(p0.y));C.lineTo(wx(p1.x),wy(p1.y));C.stroke();
+    }
+  });
+  C.globalAlpha=1;
+}
+
 function drawBuls() {
-  G.buls.forEach(b=>{if(!isVis(b.x,b.y,20))return;C.save();C.translate(wx(b.x),wy(b.y));C.rotate(Math.atan2(b.vy,b.vx));C.globalAlpha=Math.min(1,b.life*3);if(b.isEnemy){C.fillStyle='rgba(255,60,60,.25)';C.beginPath();C.ellipse(0,0,10,5,0,0,Math.PI*2);C.fill();C.fillStyle='#aa1111';C.beginPath();C.ellipse(0,0,7,3.5,0,0,Math.PI*2);C.fill();C.fillStyle='#ff3333';C.beginPath();C.ellipse(1,0,5,2.2,0,0,Math.PI*2);C.fill();C.fillStyle='#ff8888';C.beginPath();C.arc(2,0,1.2,0,Math.PI*2);C.fill();}else if(b.tp==='pulse'){C.fillStyle='rgba(75,155,255,.22)';C.beginPath();C.ellipse(0,0,14,6.5,0,0,Math.PI*2);C.fill();C.fillStyle='#1855aa';C.beginPath();C.ellipse(0,0,11,3.8,0,0,Math.PI*2);C.fill();C.fillStyle='#55aaff';C.beginPath();C.ellipse(2,0,7,2.5,0,0,Math.PI*2);C.fill();C.fillStyle='#aadfff';C.beginPath();C.ellipse(4.5,-.5,3.5,1.3,0,0,Math.PI*2);C.fill();C.fillStyle='#fff';C.beginPath();C.arc(5.5,0,1.2,0,Math.PI*2);C.fill();}else{C.fillStyle='rgba(250,155,25,.2)';C.beginPath();C.ellipse(0,0,9,4.5,0,0,Math.PI*2);C.fill();C.fillStyle='#bb5500';C.beginPath();C.ellipse(0,0,7,3,0,0,Math.PI*2);C.fill();C.fillStyle='#ffaa33';C.beginPath();C.ellipse(1.5,0,4.5,2,0,0,Math.PI*2);C.fill();C.fillStyle='#ffdd88';C.beginPath();C.arc(2.5,0,1.1,0,Math.PI*2);C.fill();}C.globalAlpha=1;C.restore();});
+  G.buls.forEach(b=>{if(!isVis(b.x,b.y,20))return;C.save();C.translate(wx(b.x),wy(b.y));C.rotate(Math.atan2(b.vy,b.vx));C.globalAlpha=Math.min(1,b.life*3);if(b.tp==='pulse'){C.fillStyle='rgba(75,155,255,.22)';C.beginPath();C.ellipse(0,0,14,6.5,0,0,Math.PI*2);C.fill();C.fillStyle='#1855aa';C.beginPath();C.ellipse(0,0,11,3.8,0,0,Math.PI*2);C.fill();C.fillStyle='#55aaff';C.beginPath();C.ellipse(2,0,7,2.5,0,0,Math.PI*2);C.fill();C.fillStyle='#aadfff';C.beginPath();C.ellipse(4.5,-.5,3.5,1.3,0,0,Math.PI*2);C.fill();C.fillStyle='#fff';C.beginPath();C.arc(5.5,0,1.2,0,Math.PI*2);C.fill();}else{C.fillStyle='rgba(250,155,25,.2)';C.beginPath();C.ellipse(0,0,9,4.5,0,0,Math.PI*2);C.fill();C.fillStyle='#bb5500';C.beginPath();C.ellipse(0,0,7,3,0,0,Math.PI*2);C.fill();C.fillStyle='#ffaa33';C.beginPath();C.ellipse(1.5,0,4.5,2,0,0,Math.PI*2);C.fill();C.fillStyle='#ffdd88';C.beginPath();C.arc(2.5,0,1.1,0,Math.PI*2);C.fill();}C.globalAlpha=1;C.restore();});
+}
+function drawEBuls() {
+  G.eBuls.forEach(b=>{
+    if(!isVis(b.x,b.y,20))return;
+    const sx=wx(b.x),sy=wy(b.y);
+    C.globalAlpha=Math.min(1,b.life*3);
+    // Glow
+    C.fillStyle=b.col+'22';C.beginPath();C.arc(sx,sy,b.r+4,0,Math.PI*2);C.fill();
+    // Core
+    C.fillStyle=b.col;C.beginPath();C.arc(sx,sy,b.r,0,Math.PI*2);C.fill();
+    // Bright center
+    C.fillStyle='#ffffff88';C.beginPath();C.arc(sx,sy,b.r*0.4,0,Math.PI*2);C.fill();
+    C.globalAlpha=1;
+  });
 }
 function drawChain() {
   if(!G.chainFl||G.chainFl.life<=0)return;
@@ -529,6 +571,38 @@ function drawParts() {
   G.parts.forEach(p=>{if(!isVis(p.x,p.y,20))return;C.globalAlpha=Math.max(0,p.life);if(p.tp==='ring'){C.strokeStyle=p.col;C.lineWidth=2;C.beginPath();C.arc(wx(p.x),wy(p.y),p.r,0,Math.PI*2);C.stroke();}else{const sx2=wx(p.x),sy2=wy(p.y);C.fillStyle=p.col;C.fillRect(sx2-p.sz/2,sy2-p.sz/2,p.sz,p.sz);}});
   C.globalAlpha=1;
 }
+function drawDmgNums(dt) {
+  for (let i=G.dmgNums.length-1;i>=0;i--) {
+    const n=G.dmgNums[i];
+    n.y-=n.vy; n.life-=dt/800;
+    if (n.life<=0) { G.dmgNums.splice(i,1); continue; }
+    if (!isVis(n.x,n.y,20)) continue;
+    C.globalAlpha=n.life;
+    C.font=`bold ${Math.round(10+n.val/10)}px system-ui,sans-serif`;
+    C.fillStyle='#fff';C.textAlign='center';C.textBaseline='middle';
+    C.fillText(n.val,wx(n.x),wy(n.y));
+  }
+  C.globalAlpha=1;
+}
+
+function drawFullscreenBtn() {
+  // Слева от мини-карты (mw=192, mx=W-mw-10)
+  const mmx=W-192-10; // левый край мини-карты
+  const bx=mmx-30, by=H-30, bs=22;
+  const hv=mX>=bx&&mX<=bx+bs&&mY>=by&&mY<=by+bs;
+  C.globalAlpha=hv?0.6:0.25;
+  C.strokeStyle='#fff';C.lineWidth=1.5;
+  const m=3, s2=bs-m*2, cx=bx+m, cy=by+m, cl=6;
+  C.beginPath();
+  C.moveTo(cx,cy+cl);C.lineTo(cx,cy);C.lineTo(cx+cl,cy);
+  C.moveTo(cx+s2-cl,cy);C.lineTo(cx+s2,cy);C.lineTo(cx+s2,cy+cl);
+  C.moveTo(cx+s2,cy+s2-cl);C.lineTo(cx+s2,cy+s2);C.lineTo(cx+s2-cl,cy+s2);
+  C.moveTo(cx+cl,cy+s2);C.lineTo(cx,cy+s2);C.lineTo(cx,cy+s2-cl);
+  C.stroke();
+  C.globalAlpha=1;
+  bR.push({x:bx,y:by,w:bs,h:bs,act:'fullscreen'});
+}
+
 function drawHPBar() {
   const s=G.s,bw=200,bh=6,bx=W/2-100,by=H-18;
   C.fillStyle='rgba(10,20,40,.7)';C.fillRect(bx-2,by-2,bw+4,bh+4);
@@ -547,7 +621,7 @@ function drawHPBar() {
 
 // ─── Back button helper ────────────────────────────────
 function drawBackBtn(t) {
-  const bx=14,by=H-42,bw=80,bh=28;
+  const bx=14,by=14,bw=80,bh=28;
   const hv=mX>=bx&&mX<=bx+bw&&mY>=by&&mY<=by+bh;
   rRect(bx,by,bw,bh,6);
   C.fillStyle=hv?'#0d1a2a':'#06101a';C.fill();
@@ -560,22 +634,23 @@ function drawBackBtn(t) {
 
 function drawMenu(t) {
   drawBGStatic(t);
+  const cy=H/2; // центр по вертикали
   const selShip=SHIPS.find(s=>s.id===META.selected)||SHIPS[0];
-  drawShipSprite(META.selected,W/2,H/2-80,-Math.PI/2,t,{orbit:META.selected==='sentinel'?1:0},false);
+  drawShipSprite(META.selected,W/2,cy-80,-Math.PI/2,t,{orbit:META.selected==='sentinel'?1:0},false);
   C.textAlign='center';C.textBaseline='middle';
-  C.font='500 40px system-ui,sans-serif';C.fillStyle='#ffffff';C.fillText('VOID SURVIVOR',W/2,115);
+  C.font='500 40px system-ui,sans-serif';C.fillStyle='#ffffff';C.fillText('VOID SURVIVOR',W/2,cy-155);
   C.font='11px system-ui,sans-serif';C.fillStyle='#ffffff40';
-  C.fillText('move cursor to fly  ·  auto-shoot  ·  SPACE to scan',W/2,142);
-  C.font='500 13px system-ui,sans-serif';C.fillStyle=selShip.accent;C.fillText(selShip.name.toUpperCase(),W/2,H/2-20);
-  C.font='11px system-ui,sans-serif';C.fillStyle='#ffffff30';C.fillText(selShip.passiveDesc,W/2,H/2-4);
-  const demos=[{tp:'seek',x:W/2-108,y:H/2+60,r:12,mhp:42,hp:42,ph:0},{tp:'heavy',x:W/2,y:H/2+62,r:19,mhp:155,hp:155,ph:0},{tp:'fast',x:W/2+108,y:H/2+56,r:8,mhp:24,hp:24,ph:0}];
+  C.fillText('move cursor to fly  ·  auto-shoot  ·  SPACE to scan  ·  F fullscreen',W/2,cy-128);
+  C.font='500 13px system-ui,sans-serif';C.fillStyle=selShip.accent;C.fillText(selShip.name.toUpperCase(),W/2,cy-20);
+  C.font='11px system-ui,sans-serif';C.fillStyle='#ffffff30';C.fillText(selShip.passiveDesc,W/2,cy-4);
+  const demos=[{tp:'seek',x:W/2-108,y:cy+60,r:12,mhp:42,hp:42,ph:0},{tp:'heavy',x:W/2,y:cy+62,r:19,mhp:155,hp:155,ph:0},{tp:'fast',x:W/2+108,y:cy+56,r:8,mhp:24,hp:24,ph:0}];
   demos.forEach(e=>drawEn(e,t,e.x,e.y));
   C.font='10px system-ui,sans-serif';C.fillStyle='#ffffff1e';
-  ['seeker','heavy','speeder'].forEach((l,i)=>C.fillText(l,W/2+[-108,0,108][i],H/2+90));
+  ['seeker','heavy','speeder'].forEach((l,i)=>C.fillText(l,W/2+[-108,0,108][i],cy+90));
   C.textAlign='left';C.font='500 14px system-ui,sans-serif';C.fillStyle='#ffdd44';
   C.fillText('⬡ '+META.credits.toLocaleString(),18,22);
   C.fillStyle='#44ffaa';C.fillText('◆ '+META.ore,18,42);
-  const pw=185,ph2=52,px=W/2-pw/2,py=H/2+110;
+  const pw=185,ph2=52,px=W/2-pw/2,py=cy+110;
   const phv=mX>=px&&mX<=px+pw&&mY>=py&&mY<=py+ph2;
   rRect(px,py,pw,ph2,9);C.fillStyle=phv?'#2277cc':'#1155aa';C.fill();
   C.font='500 17px system-ui,sans-serif';C.fillStyle='#fff';C.textAlign='center';C.fillText('PLAY',W/2,py+ph2/2);
@@ -595,7 +670,7 @@ function drawPlay(t) {
   if (G.flT>0){C.fillStyle=`rgba(195,18,18,${G.flT/980})`;C.fillRect(0,0,W,H);}
   drawWorldBorder();
   drawObstacles(t);
-  drawParts();drawGems(t);drawBuls();drawChain();drawOrbs();
+  drawParts();drawGems(t);drawTrails();drawBuls();drawEBuls();drawChain();drawOrbs();drawDmgNums(_dt);
   G.ens.forEach(e=>{if(isVis(e.x,e.y,30))drawEn(e,t,wx(e.x),wy(e.y));});
   if (G.boss && isVis(G.boss.x,G.boss.y,G.boss.r+20)) drawBoss(t);
 
@@ -603,7 +678,8 @@ function drawPlay(t) {
 
   // Mining beam (под кораблём)
   drawMiningBeam(t);
-  drawShip(wx(G.s.x),wy(G.s.y),G.s.ang,G.s.u,t,false);
+  if (G.deathAnim<=0) drawShip(wx(G.s.x),wy(G.s.y),G.s.ang,G.s.u,t,false);
+  drawDebris();
   drawScanPulse();
 
   // Курсор
@@ -684,9 +760,11 @@ function drawPlay(t) {
 
   drawScanUI();
   drawMinimap();
+  drawFullscreenBtn();
 
   // ESC hint (fade после 3 сек)
   if (G.gameT<3000){C.globalAlpha=(3000-G.gameT)/3000*0.4;C.font='10px system-ui,sans-serif';C.fillStyle='#fff';C.textAlign='center';C.fillText('ESC — pause',W/2,H-26);C.globalAlpha=1;}
+
 }
 
 // ─── PAUSE ─────────────────────────────────────────────
@@ -695,7 +773,7 @@ function drawPause(t) {
   drawBGPlay(t);
   drawWorldBorder();
   drawObstacles(t);
-  drawParts();drawGems(t);drawBuls();drawChain();drawOrbs();
+  drawParts();drawGems(t);drawTrails();drawBuls();drawEBuls();drawChain();drawOrbs();drawDmgNums(_dt);
   G.ens.forEach(e=>{if(isVis(e.x,e.y,30))drawEn(e,t,wx(e.x),wy(e.y));});
   if (G.boss && isVis(G.boss.x,G.boss.y,G.boss.r+20)) drawBoss(t);
   drawShip(wx(G.s.x),wy(G.s.y),G.s.ang,G.s.u,t,false);
@@ -771,24 +849,23 @@ function drawShop(t) {
   C.font='500 15px system-ui,sans-serif';C.fillStyle='#ffdd44';C.fillText('⬡ '+META.credits.toLocaleString(),W/2,62);
   C.fillStyle='#44ffaa';C.font='12px system-ui,sans-serif';C.fillText('◆ '+META.ore+' ore stored',W/2,80);
   bR=[];
-  const cols=3,cw2=176,ch3=192,gx=8,gy=8,totalW=cols*cw2+(cols-1)*gx,sx2=(W-totalW)/2,sy=94;
+  const cols=6,cw2=140,ch3=168,gx=6,gy=6,totalW=cols*cw2+(cols-1)*gx,sx2=(W-totalW)/2,sy=94;
   SHIPS.forEach((ship,i)=>{
     const col2=i%cols,row=Math.floor(i/cols),cx3=sx2+col2*(cw2+gx),cy=sy+row*(ch3+gy);
     const owned=META.owned.includes(ship.id),isSel=shopSel===ship.id,isAct=META.selected===ship.id;
     const hov=mX>=cx3&&mX<=cx3+cw2&&mY>=cy&&mY<=cy+ch3;
     rRect(cx3,cy,cw2,ch3,8);C.fillStyle=isSel?'#0a1e30':hov?'#081522':'#040e18';C.fill();
     C.strokeStyle=isAct?'#44aaff':isSel?'#225588':hov&&owned?'#1a3a55':'#0e1e2a';C.lineWidth=isAct?2:1;C.stroke();
-    drawShipSprite(ship.id,cx3+cw2/2,cy+52,-Math.PI/2,t,{orbit:0},false);
-    C.textAlign='center';C.font='500 12px system-ui,sans-serif';C.fillStyle=isAct?ship.accent:owned?'#aabbcc':'#445566';C.fillText(ship.name,cx3+cw2/2,cy+102);
-    C.font='10px system-ui,sans-serif';C.fillStyle='#ffffff20';C.fillText(ship.lore,cx3+cw2/2,cy+115);
-    const bx2=cx3+16,bw3=cw2-32;
-    [{label:'ATK',val:ship.statAtk,col:'#ff8844'},{label:'SPD',val:ship.statSpd,col:'#44ff88'},{label:'DEF',val:ship.statDef,col:'#44aaff'}].forEach((b,bi)=>{C.font='9px system-ui,sans-serif';C.fillStyle='#ffffff35';C.textAlign='left';C.fillText(b.label,bx2,cy+128+bi*13);drawStatBar(bx2+24,cy+124+bi*13,bw3-24,b.val,b.col);});
-    C.textAlign='center';C.font='9px system-ui,sans-serif';C.fillStyle=owned?ship.accent+'88':'#223344';C.fillText(ship.passiveDesc,cx3+cw2/2,cy+168);
-    const btnY=cy+ch3-30,btnH=24;rRect(cx3+10,btnY,cw2-20,btnH,5);
+    drawShipSprite(ship.id,cx3+cw2/2,cy+42,-Math.PI/2,t,{orbit:0},false);
+    C.textAlign='center';C.font='500 11px system-ui,sans-serif';C.fillStyle=isAct?ship.accent:owned?'#aabbcc':'#445566';C.fillText(ship.name,cx3+cw2/2,cy+82);
+    const bx2=cx3+10,bw3=cw2-20;
+    [{label:'ATK',val:ship.statAtk,col:'#ff8844'},{label:'SPD',val:ship.statSpd,col:'#44ff88'},{label:'DEF',val:ship.statDef,col:'#44aaff'}].forEach((b,bi)=>{C.font='8px system-ui,sans-serif';C.fillStyle='#ffffff35';C.textAlign='left';C.fillText(b.label,bx2,cy+98+bi*12);drawStatBar(bx2+22,cy+95+bi*12,bw3-22,b.val,b.col);});
+    C.textAlign='center';C.font='8px system-ui,sans-serif';C.fillStyle=owned?ship.accent+'88':'#223344';C.fillText(ship.passiveDesc,cx3+cw2/2,cy+138);
+    const btnY=cy+ch3-26,btnH=20;rRect(cx3+8,btnY,cw2-16,btnH,5);
     let btnCol,btnTxt;
     if(isAct){btnCol='#0d2a40';btnTxt='ACTIVE';}
-    else if(owned){const bHov=mX>=cx3+10&&mX<=cx3+cw2-10&&mY>=btnY&&mY<=btnY+btnH;btnCol=bHov?'#1155aa':'#0a2040';btnTxt='SELECT';}
-    else{const canBuy=META.credits>=ship.cost,bHov=mX>=cx3+10&&mX<=cx3+cw2-10&&mY>=btnY&&mY<=btnY+btnH&&canBuy;btnCol=canBuy?(bHov?'#1a5522':'#0d3316'):'#0c1510';btnTxt=canBuy?('⬡ '+ship.cost):'⬡ '+ship.cost;}
+    else if(owned){const bHov=mX>=cx3+8&&mX<=cx3+cw2-8&&mY>=btnY&&mY<=btnY+btnH;btnCol=bHov?'#1155aa':'#0a2040';btnTxt='SELECT';}
+    else{const canBuy=META.credits>=ship.cost,bHov=mX>=cx3+8&&mX<=cx3+cw2-8&&mY>=btnY&&mY<=btnY+btnH&&canBuy;btnCol=canBuy?(bHov?'#1a5522':'#0d3316'):'#0c1510';btnTxt=canBuy?('⬡ '+ship.cost):'⬡ '+ship.cost;}
     C.fillStyle=btnCol;C.fill();C.font='500 10px system-ui,sans-serif';
     C.fillStyle=isAct?'#44aaff':owned?'#66bbee':META.credits>=ship.cost?'#44ee66':'#2a5533';C.fillText(btnTxt,cx3+cw2/2,btnY+btnH/2);
     bR.push({x:cx3,y:cy,w:cw2,h:ch3,act:owned?'select':'buy',id:ship.id,cost:ship.cost});
@@ -880,7 +957,7 @@ function drawFailed(t) {
 // app = { G, mX, mY, bR, hovI, shopSel, dt }
 export function draw(ts, app) {
   G = app.G; mX = app.mX; mY = app.mY;
-  bR = app.bR; hovI = app.hovI; shopSel = app.shopSel;
+  bR = app.bR; hovI = app.hovI; shopSel = app.shopSel; _dt = app.dt;
 
   C.save();
   if (G.shT>0)C.translate(G.shX,G.shY);

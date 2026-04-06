@@ -6,7 +6,7 @@ import {
 } from './config.js';
 import { META, saveMeta, mkG, bindW3Addr } from './state.js';
 import { genWorld, initExtraction } from './world.js';
-import { trySpawnEnemies, trySpawnBoss, updateBoss, killBoss, killEn, spawnEn } from './enemies.js';
+import { trySpawnEnemies, trySpawnBoss, updateBoss, killBoss, killEn, spawnEn, updateEnemyFire, updateEBuls } from './enemies.js';
 import { initRender, draw, rRect } from './render.js';
 import {
   W3, w3Init, w3Connect, w3SwitchChain, w3BuyOre, w3Toast,
@@ -92,6 +92,10 @@ function doScan() {
     .map(e=>({x:e.x,y:e.y,tp:e.tp,life:1}));
 }
 
+function dmgNum(x,y,val) {
+  G.dmgNums.push({ x, y, val:Math.round(val), life:1, vy:1.5+Math.random()*0.5 });
+}
+
 // fx object для передачи в enemies.js
 const fx = { shk, ptcl, ring, gem, updHUD };
 
@@ -117,6 +121,23 @@ function applyUpg(k) {
 
 function update(dt) {
   if (G.ph!=='play') return;
+
+  // Death animation
+  if (G.deathAnim>0) {
+    G.deathAnim-=dt/1000;
+    for (const d of G.debris) {
+      d.x+=d.vx; d.y+=d.vy; d.rot+=d.rotSpd;
+      d.vx*=0.98; d.vy*=0.98; d.life=Math.max(0,G.deathAnim/2.5);
+    }
+    // Обновляем частицы во время анимации
+    for (let i=G.parts.length-1;i>=0;i--) {
+      const p=G.parts[i]; p.x+=p.vx; p.y+=p.vy; p.life-=dt/350;
+      if (p.tp==='ring'){p.r+=dt*0.15;} else {p.vx*=0.96;p.vy*=0.96;}
+      if (p.life<=0) G.parts.splice(i,1);
+    }
+    if (G.deathAnim<=0) { endRun(); }
+    return;
+  }
 
   G.flT=Math.max(0,G.flT-dt); G.shT=Math.max(0,G.shT-dt);
   if (G.shT<=0) { G.shX=0; G.shY=0; }
@@ -167,7 +188,11 @@ function update(dt) {
   }
 
   // Boss update
-  if (G.boss) updateBoss(G,dt,fx);
+  if (G.boss && updateBoss(G,dt,fx)) { startDeathAnim(); return; }
+
+  // Enemy fire + enemy bullets
+  updateEnemyFire(G,dt);
+  if (updateEBuls(G,dt,fx)) { startDeathAnim(); return; }
 
   // Препятствия: дрейф
   for (const o of G.obs) {
@@ -269,7 +294,7 @@ function update(dt) {
     const dmg=(15+s.u.pulse*9)*dm, shots=1+Math.floor(s.u.pulse/3);
     for (let i=0;i<shots;i++) {
       const da=(i-(shots-1)/2)*0.2, ba=a2(s,near)+da;
-      G.buls.push({x:s.x,y:s.y,vx:Math.cos(ba)*10,vy:Math.sin(ba)*10,dmg,life:1,tp:'pulse',r:5});
+      G.buls.push({x:s.x,y:s.y,vx:Math.cos(ba)*10,vy:Math.sin(ba)*10,dmg,life:1,tp:'pulse',r:5,trail:[]});
     }
   }
 
@@ -306,7 +331,8 @@ function update(dt) {
     const targets=[...visEns].sort((a,b)=>d2(s,a)-d2(s,b)).slice(0,1+s.u.chain*2+getChainBonus());
     const segs=[{x:s.x,y:s.y}];
     targets.forEach(e=>{
-      e.hp-=(22+s.u.chain*14)*dm; ptcl(e.x,e.y,'#aaccff',6,3,2); segs.push({x:e.x,y:e.y});
+      const cd=(22+s.u.chain*14)*dm; e.hp-=cd; dmgNum(e.x,e.y,cd);
+      ptcl(e.x,e.y,'#aaccff',6,3,2); segs.push({x:e.x,y:e.y});
       if (e.hp<=0){const idx=G.ens.indexOf(e);if(idx>=0)killEn(G,idx,fx);}
     });
     G.chainFl={segs,life:1};
@@ -319,21 +345,23 @@ function update(dt) {
     const cnt=3+s.u.scatter*2, ba=a2(s,near);
     for (let i=0;i<cnt;i++) {
       const sa=ba+(i-(cnt-1)/2)*0.22;
-      G.buls.push({x:s.x,y:s.y,vx:Math.cos(sa)*7.5,vy:Math.sin(sa)*7.5,dmg:(8+s.u.scatter*5)*dm,life:0.8,tp:'scatter',r:3.5});
+      G.buls.push({x:s.x,y:s.y,vx:Math.cos(sa)*7.5,vy:Math.sin(sa)*7.5,dmg:(8+s.u.scatter*5)*dm,life:0.8,tp:'scatter',r:3.5,trail:[]});
     }
   }
 
   // ── Пули ────────────────────────────────────────────
   for (let i=G.buls.length-1;i>=0;i--) {
     const b=G.buls[i]; b.x+=b.vx; b.y+=b.vy;
-    b.life-=dt/(b.tp==='pulse'?1100:b.tp==='enemy'?2000:850);
+    if (b.trail) { b.trail.push({x:b.x,y:b.y}); if(b.trail.length>20) b.trail.shift(); }
+    b.life-=dt/(b.tp==='pulse'?1100:850);
     if (b.life<=0||b.x<0||b.x>WW||b.y<0||b.y>WH){G.buls.splice(i,1);continue;}
     let blocked=false;
     for (let oi=G.obs.length-1;oi>=0;oi--) {
       const o=G.obs[oi];
       if (o.tp==='nebula') continue;
       if (d2(b,o)<o.r) {
-        ptcl(b.x,b.y,'#aaaaaa',3,1.5,2); blocked=true;
+        const sparkCol=o.tp==='asteroid'?{poor:'#888899',medium:'#ffaa44',rich:'#44ffaa'}[o.subtype]||'#aaaaaa':'#aaaaaa';
+        ptcl(b.x,b.y,sparkCol,4,2,2); blocked=true;
         if (o.tp==='crystal') {
           o.hp-=b.dmg; ptcl(o.x,o.y,'#88ccff',4,2,2);
           if (o.hp<=0) {
@@ -348,27 +376,19 @@ function update(dt) {
     }
     if (blocked){G.buls.splice(i,1);continue;}
     let hit=false;
-    if (b.isEnemy) {
-      // Вражеская пуля → проверяем попадание в игрока
-      if (d2(b,s)<b.r+16 && s.invT<=0) {
-        s.hp=Math.max(0,s.hp-b.dmg); s.invT=500;
-        shk(); G.flT=300; ptcl(s.x,s.y,'#ff4444',10,3,2);
-        updHUD(); hit=true;
-        if (s.hp<=0){endRun();return;}
+    // Пуля игрока → враги
+    for (let j=G.ens.length-1;j>=0;j--) {
+      if (d2(b,G.ens[j])<b.r+G.ens[j].r) {
+        G.ens[j].hp-=b.dmg; dmgNum(b.x,b.y,b.dmg);
+        ptcl(b.x,b.y,b.tp==='pulse'?'#55aaff':'#ffaa33',5,2,2);
+        hit=true; if(G.ens[j].hp<=0)killEn(G,j,fx); break;
       }
-    } else {
-      // Пуля игрока → враги
-      for (let j=G.ens.length-1;j>=0;j--) {
-        if (d2(b,G.ens[j])<b.r+G.ens[j].r) {
-          G.ens[j].hp-=b.dmg; ptcl(b.x,b.y,b.tp==='pulse'?'#55aaff':'#ffaa33',5,2,2);
-          hit=true; if(G.ens[j].hp<=0)killEn(G,j,fx); break;
-        }
-      }
-      // Пуля игрока → босс
-      if (!hit && G.boss && d2(b,G.boss)<b.r+G.boss.r) {
-        G.boss.hp-=b.dmg; ptcl(b.x,b.y,'#ffdd44',6,3,2);
-        hit=true; if(G.boss.hp<=0) killBoss(G,fx);
-      }
+    }
+    // Пуля игрока → босс
+    if (!hit && G.boss && d2(b,G.boss)<b.r+G.boss.r) {
+      G.boss.hp-=b.dmg; dmgNum(b.x,b.y,b.dmg);
+      ptcl(b.x,b.y,'#ffdd44',6,3,2);
+      hit=true; if(G.boss.hp<=0) killBoss(G,fx);
     }
     if (hit) G.buls.splice(i,1);
   }
@@ -391,7 +411,7 @@ function update(dt) {
       s.hp=Math.max(0,s.hp-dmgIn); s.invT=900;
       if (dmgIn>0){shk();G.flT=420;ptcl(s.x,s.y,'#ff3344',15,3.5,3);ring(s.x,s.y,'#ff5566',26);}
       updHUD();
-      if (s.hp<=0){endRun();return;}
+      if (s.hp<=0){startDeathAnim();return;}
     }
     if (d2(e,s)>900) G.ens.splice(i,1);
   }
@@ -500,6 +520,24 @@ function triggerFailed() {
   G.ph='failed';
 }
 
+function startDeathAnim() {
+  G.deathAnim=2.5;
+  G.debris=[];
+  for (let i=0;i<18;i++) {
+    const a=rn(Math.PI*2), spd=1.5+rn(3);
+    G.debris.push({
+      x:G.s.x, y:G.s.y,
+      vx:Math.cos(a)*spd, vy:Math.sin(a)*spd,
+      rot:rn(Math.PI*2), rotSpd:(rn(2)-1)*0.08,
+      sz:3+rn(5), life:1,
+      col:['#88ccff','#1d5e98','#55aaff','#ffffff'][ri(4)],
+    });
+  }
+  ptcl(G.s.x,G.s.y,'#ffdd44',30,6,4);
+  ring(G.s.x,G.s.y,'#ff6644',60);
+  shk();
+}
+
 function endRun() {
   const credFromScore = Math.floor(G.score*CREDITS_PER_SCORE);
   const credFromOre   = Math.floor(G.ore*ORE_PER_CREDIT);
@@ -530,6 +568,14 @@ function startGame() {
   G.banT=3200;G.ph='play';updHUD();
 }
 
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.getElementById('game').requestFullscreen().catch(()=>{});
+  }
+}
+
 function goBack() {
   if      (G.ph==='pause') G.ph='play';
   else if (G.ph==='shop')  G.ph=G.shopFrom==='pause'?'pause':'menu';
@@ -555,6 +601,7 @@ function click(x,y) {
         G.ph='play';updHUD();
       }
       else if (b.act==='scan')    doScan();
+      else if (b.act==='fullscreen') toggleFullscreen();
       else if (b.act==='w3connect') w3Connect();
       else if (b.act==='w3switch')  w3SwitchChain();
       else if (b.act==='w3buyore')  w3BuyOre(b.ore);
@@ -581,12 +628,14 @@ CV.addEventListener('touchmove',e=>{
 
 // ── Клавиатура ─────────────────────────────────────────
 document.addEventListener('keydown',e=>{
-  if (e.key==='Escape'||e.key==='Esc') {
+  if (e.code==='Escape') {
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
     if      (G.ph==='play')  G.ph='pause';
     else if (G.ph==='pause') G.ph='play';
     else if (G.ph==='shop')  goBack();
   }
-  if ((e.key===' '||e.code==='Space')&&G.ph==='play') {
+  if (e.code==='KeyF') { toggleFullscreen(); return; }
+  if (e.code==='Space'&&G.ph==='play') {
     e.preventDefault();
     doScan();
   }

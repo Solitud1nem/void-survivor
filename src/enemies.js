@@ -1,5 +1,5 @@
 import {
-  WW, WH, W, H, SPAWN_RADIUS, ENEMY_CFG,
+  WW, WH, W, H, SPAWN_RADIUS, ENEMY_CFG, ENEMY_FIRE,
   SPAWN_RATES, BOSS_CFG, MAX_VISIBLE_ENEMIES, MAX_BOSSES_PER_RUN, BOSS_SPAWN_CHANCE,
 } from './config.js';
 
@@ -21,7 +21,7 @@ export function spawnEn(G, tp) {
   const x = clamp(G.s.x + Math.cos(a) * d, 60, WW - 60);
   const y = clamp(G.s.y + Math.sin(a) * d, 60, WH - 60);
   const cc = ENEMY_CFG[tp];
-  G.ens.push({ x, y, vx: 0, vy: 0, tp, ...cc, mhp: cc.hp, invT: 0, ph: rn(Math.PI * 2) });
+  G.ens.push({ x, y, vx: 0, vy: 0, tp, ...cc, mhp: cc.hp, invT: 0, ph: rn(Math.PI * 2), fireT: rn(1000) });
 }
 
 export function trySpawnEnemies(G) {
@@ -67,18 +67,20 @@ export function updateBoss(G, dt, fx) {
   if (b.fireT >= BOSS_CFG.fireRate) {
     b.fireT = 0;
     const ba = a2(b, s);
-    G.buls.push({
+    G.eBuls.push({
       x: b.x, y: b.y,
       vx: Math.cos(ba) * BOSS_CFG.bulSpd, vy: Math.sin(ba) * BOSS_CFG.bulSpd,
-      dmg: BOSS_CFG.bulDmg, col: '#ff4444', trail: [], isEnemy: true, r: 5, life: 1, tp: 'enemy',
+      dmg: BOSS_CFG.bulDmg, col: '#ff4444', r: 5, life: 1,
     });
   }
 
   if (d2(b, s) < b.r + 16 && s.invT <= 0) {
-    s.hp -= BOSS_CFG.bulDmg; s.invT = 500;
+    s.hp = Math.max(0, s.hp - BOSS_CFG.bulDmg); s.invT = 500;
     fx.shk(); G.flT = 300;
     fx.ptcl(s.x, s.y, '#ff4444', 10, 3, 2);
+    if (s.hp <= 0) return true;
   }
+  return false;
 }
 
 // fx = { ptcl, ring, gem, updHUD }
@@ -94,6 +96,55 @@ export function killBoss(G, fx) {
   for (let j = 0; j < gc; j++) fx.gem(b.x + rn(24) - 12, b.y + rn(24) - 12, Math.ceil(b.xp / gc));
   fx.updHUD();
   G.boss = null;
+}
+
+// ── Enemy shooting ────────────────────────────────────
+
+export function updateEnemyFire(G, dt) {
+  const s = G.s;
+  for (const e of G.ens) {
+    const fc = ENEMY_FIRE[e.tp];
+    if (!fc) continue;
+    e.fireT += dt;
+    if (e.fireT < fc.cooldown) continue;
+    const dist = d2(e, s);
+    if (dist > fc.range) continue;
+    e.fireT = 0;
+    const ang = a2(e, s);
+    G.eBuls.push({
+      x: e.x, y: e.y,
+      vx: Math.cos(ang) * fc.spd, vy: Math.sin(ang) * fc.spd,
+      dmg: fc.dmg, col: fc.col, r: fc.r, life: 1,
+    });
+  }
+}
+
+// fx = { shk }
+export function updateEBuls(G, dt, fx) {
+  const s = G.s;
+  for (let i = G.eBuls.length - 1; i >= 0; i--) {
+    const b = G.eBuls[i];
+    b.x += b.vx; b.y += b.vy;
+    b.life -= dt / 2000;
+    if (b.life <= 0 || b.x < 0 || b.x > WW || b.y < 0 || b.y > WH) {
+      G.eBuls.splice(i, 1); continue;
+    }
+    // Collision с препятствиями
+    let blocked = false;
+    for (const o of G.obs) {
+      if (o.tp === 'nebula') continue;
+      if (d2(b, o) < o.r) { blocked = true; break; }
+    }
+    if (blocked) { G.eBuls.splice(i, 1); continue; }
+    // Collision с игроком
+    if (d2(b, s) < b.r + 16 && s.invT <= 0) {
+      s.hp = Math.max(0, s.hp - b.dmg); s.invT = 500;
+      fx.shk(); G.flT = 300;
+      G.eBuls.splice(i, 1);
+      if (s.hp <= 0) return true; // signal death
+    }
+  }
+  return false;
 }
 
 // fx = { ptcl, ring, gem, updHUD }

@@ -35,7 +35,8 @@ export function mkG() {
     score:  0, lvl:1, xp:0, xpMax:XP_BASE,
     gameT:0, banT:0,
     flT:0, shT:0, shX:0, shY:0,
-    parts:[], gems:[], buls:[], ens:[], orbs:[],
+    parts:[], gems:[], buls:[], eBuls:[], ens:[], orbs:[], dmgNums:[], debris:[],
+    deathAnim:0, // >0 = анимация смерти идёт (секунды)
     choices:[], chainFl:null,
     boss:null, bossCount:0, spawnT:0,
     obs:[], cam:{x:0,y:0},
