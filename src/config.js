@@ -90,6 +90,14 @@ export const BOSS_CFG = {
   fireRate:2000, bulSpd:3.5, bulDmg:18,
   oreDrop:[5,10],
 };
+// ── Weapon synergies ───────────────────────────────────
+export const SYNERGIES = [
+  { id:'boltarc',     needs:['pulse','chain'],   name:'Bolt Arc',     desc:'Pulse hits chain to 1 nearby' },
+  { id:'novaburst',   needs:['orbit','scatter'], name:'Nova Burst',   desc:'Orbs fire scatter bursts' },
+  { id:'storm',       needs:['chain','scatter'], name:'Storm',        desc:'Chain hits spawn shards' },
+  { id:'chargedorbs', needs:['pulse','orbit'],   name:'Charged Orbs', desc:'Orbs fire pulse bolts' },
+];
+
 export const MAX_VISIBLE_ENEMIES = 5;
 export const MAX_BOSSES_PER_RUN  = 2;
 export const BOSS_SPAWN_CHANCE   = 0.04;

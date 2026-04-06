@@ -38,7 +38,7 @@ export function mkG() {
     parts:[], gems:[], buls:[], eBuls:[], ens:[], orbs:[], dmgNums:[], debris:[],
     deathAnim:0, // >0 = анимация смерти идёт (секунды)
     choices:[], chainFl:null,
-    boss:null, bossCount:0, spawnT:0,
+    boss:null, bossCount:0, spawnT:0, synergy:null,
     obs:[], cam:{x:0,y:0},
     shipId: ship.id, earnedCredits:0, lostOre:0, location:null,
 

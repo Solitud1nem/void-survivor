@@ -2,7 +2,7 @@ import {
   W, H, WW, WH, WSX, WSY, SPAWN_RADIUS, SCAN_RADIUS, SCAN_MAX, SCAN_COST, SCAN_REGEN,
   MINE_RANGE, MINE_RANGE_SQ, MINE_CONT, MINE_TIME, ORE_VALUE, ORE_PER_CREDIT,
   LOCATIONS, XP_BASE, XP_GROWTH, CREDITS_PER_SCORE,
-  SHIPS, UPGRADES, ENEMY_CFG,
+  SHIPS, UPGRADES, ENEMY_CFG, SYNERGIES,
 } from './config.js';
 import { META, saveMeta, mkG, bindW3Addr } from './state.js';
 import { genWorld, initExtraction } from './world.js';
@@ -108,9 +108,18 @@ function tryUpgrade() {
   if (ch.length===0) { G.ph='play'; updHUD(); return; }
   G.choices=ch; G.ph='upgrade'; hovI=-1;
 }
+function checkSynergy() {
+  const u=G.s.u;
+  G.synergy=null;
+  for (const syn of SYNERGIES) {
+    if (syn.needs.every(k=>u[k]>0)) { G.synergy=syn; return; }
+  }
+}
+
 function applyUpg(k) {
   G.s.u[k]++;
   if (k==='armor') { G.s.mhp+=25; G.s.hp=Math.min(G.s.mhp,G.s.hp+15); }
+  checkSynergy();
   ptcl(G.s.x,G.s.y,'#44ff88',18,5,3); ring(G.s.x,G.s.y,'#44ff88',45);
   G.ph='play'; updHUD();
 }
@@ -194,7 +203,7 @@ function update(dt) {
   updateEnemyFire(G,dt);
   if (updateEBuls(G,dt,fx)) { startDeathAnim(); return; }
 
-  // Препятствия: дрейф
+  // Препятствия: дрейф + nebula pulse
   for (const o of G.obs) {
     if (o.tp==='asteroid'||o.tp==='nebula') {
       o.x+=Math.cos(o.driftAng)*o.driftSpd;
@@ -202,6 +211,10 @@ function update(dt) {
       o.x=clamp(o.x,o.r,WW-o.r); o.y=clamp(o.y,o.r,WH-o.r);
     }
     if (o.tp==='asteroid') o.rot+=o.rotSpd*dt;
+    if (o.tp==='nebula') {
+      if (o.pulse===undefined) o.pulse=rn(Math.PI*2);
+      o.pulse+=dt*0.0005;
+    }
   }
 
   // ── Движение игрока ────────────────────────────────
@@ -266,13 +279,16 @@ function update(dt) {
 
   s.invT=Math.max(0,s.invT-dt);
 
-  // Engine trail
-  if (Math.hypot(s.vx,s.vy)>0.4) {
+  // Engine trail (intensity scales with speed)
+  const vel=Math.hypot(s.vx,s.vy);
+  if (vel>0.4) {
+    const fl=0.3+Math.min(0.7,vel/4); // 0.3..1.0
     const ta=s.ang+Math.PI, px=s.x+Math.cos(ta)*16, py=s.y+Math.sin(ta)*16;
-    if (Math.random()<0.55)
+    const spawnChance=0.3+fl*0.5; // 0.6..0.8
+    if (Math.random()<spawnChance)
       G.parts.push({x:px+(rn(5)-2.5),y:py+(rn(5)-2.5),
-        vx:Math.cos(ta)*0.9,vy:Math.sin(ta)*0.9,
-        life:0.45+rn(0.3),col:Math.random()<0.4?'#ffcc44':'#ff8822',sz:1.2+rn(2.2),tp:'sq'});
+        vx:Math.cos(ta)*(0.5+fl*0.8),vy:Math.sin(ta)*(0.5+fl*0.8),
+        life:(0.3+fl*0.4)+rn(0.2),col:Math.random()<0.4?'#ffcc44':'#ff8822',sz:(1+fl*2)+rn(1.5),tp:'sq'});
   }
 
   if (s.u.regen>0) {
@@ -322,6 +338,33 @@ function update(dt) {
         if (G.boss.hp<=0) killBoss(G,fx);
       }
     }
+    // Synergy: Charged Orbs — orbs fire pulse bolts at nearest
+    if (G.synergy?.id==='chargedorbs' && near) {
+      if (!s._orbFireT) s._orbFireT=0;
+      s._orbFireT+=dt;
+      if (s._orbFireT>=1200) {
+        s._orbFireT=0;
+        const orb=G.orbs[Math.floor(G.orbs.length*Math.random())];
+        if (orb) {
+          const oa=a2(orb,near);
+          G.buls.push({x:orb.x,y:orb.y,vx:Math.cos(oa)*9,vy:Math.sin(oa)*9,dmg:12*dm,life:0.8,tp:'pulse',r:4,trail:[]});
+        }
+      }
+    }
+    // Synergy: Nova Burst — orbs fire scatter bursts
+    if (G.synergy?.id==='novaburst') {
+      if (!s._novaT) s._novaT=0;
+      s._novaT+=dt;
+      if (s._novaT>=1500) {
+        s._novaT=0;
+        for (const orb of G.orbs) {
+          for (let si=0;si<3;si++) {
+            const sa=rn(Math.PI*2);
+            G.buls.push({x:orb.x,y:orb.y,vx:Math.cos(sa)*6,vy:Math.sin(sa)*6,dmg:6*dm,life:0.5,tp:'scatter',r:3,trail:[]});
+          }
+        }
+      }
+    }
   } else G.orbs=[];
 
   // 3. Chain Arc (только видимые, только когда facingTarget)
@@ -333,6 +376,13 @@ function update(dt) {
     targets.forEach(e=>{
       const cd=(22+s.u.chain*14)*dm; e.hp-=cd; dmgNum(e.x,e.y,cd);
       ptcl(e.x,e.y,'#aaccff',6,3,2); segs.push({x:e.x,y:e.y});
+      // Synergy: Storm — chain hits spawn scatter shards
+      if (G.synergy?.id==='storm') {
+        for (let si=0;si<2;si++) {
+          const sa=rn(Math.PI*2);
+          G.buls.push({x:e.x,y:e.y,vx:Math.cos(sa)*5,vy:Math.sin(sa)*5,dmg:5*dm,life:0.4,tp:'scatter',r:2.5,trail:[]});
+        }
+      }
       if (e.hp<=0){const idx=G.ens.indexOf(e);if(idx>=0)killEn(G,idx,fx);}
     });
     G.chainFl={segs,life:1};
@@ -381,6 +431,14 @@ function update(dt) {
       if (d2(b,G.ens[j])<b.r+G.ens[j].r) {
         G.ens[j].hp-=b.dmg; dmgNum(b.x,b.y,b.dmg);
         ptcl(b.x,b.y,b.tp==='pulse'?'#55aaff':'#ffaa33',5,2,2);
+        // Synergy: Bolt Arc — pulse hit chains to 1 nearby
+        if (G.synergy?.id==='boltarc' && b.tp==='pulse') {
+          const nearby=G.ens.filter((e2,k)=>k!==j&&d2(b,e2)<150).sort((a2,b2)=>d2(b,a2)-d2(b,b2))[0];
+          if (nearby) { const cd=b.dmg*0.5; nearby.hp-=cd; dmgNum(nearby.x,nearby.y,cd); ptcl(nearby.x,nearby.y,'#aaccff',4,2,2);
+            G.chainFl={segs:[{x:b.x,y:b.y},{x:nearby.x,y:nearby.y}],life:0.5};
+            if(nearby.hp<=0){const idx=G.ens.indexOf(nearby);if(idx>=0)killEn(G,idx,fx);}
+          }
+        }
         hit=true; if(G.ens[j].hp<=0)killEn(G,j,fx); break;
       }
     }

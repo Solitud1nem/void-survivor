@@ -131,12 +131,15 @@ function drawObstacles(t) {
       C.restore();
 
     } else if (o.tp==='nebula') {
+      const pulse=o.pulse||0;
+      const scale=1+0.05*Math.sin(pulse);
+      const nr=o.r*scale;
       C.save();C.translate(sx,sy);
-      C.globalAlpha=0.05;C.fillStyle=`hsl(${o.hue},60%,35%)`;C.beginPath();C.arc(0,0,o.r,0,Math.PI*2);C.fill();
-      C.globalAlpha=0.08;C.fillStyle=`hsl(${o.hue},55%,45%)`;C.beginPath();C.ellipse(-o.r*0.12,o.r*0.08,o.r*0.7,o.r*0.62,0.4,0,Math.PI*2);C.fill();
+      C.globalAlpha=0.05+0.015*Math.sin(pulse*1.3);C.fillStyle=`hsl(${o.hue},60%,35%)`;C.beginPath();C.arc(0,0,nr,0,Math.PI*2);C.fill();
+      C.globalAlpha=0.08+0.02*Math.sin(pulse*0.7);C.fillStyle=`hsl(${o.hue},55%,45%)`;C.beginPath();C.ellipse(-nr*0.12,nr*0.08,nr*0.7,nr*0.62,0.4,0,Math.PI*2);C.fill();
       C.globalAlpha=0.12;C.strokeStyle=`hsl(${o.hue},50%,55%)`;C.lineWidth=2;C.setLineDash([8,12]);
-      C.beginPath();C.arc(0,0,o.r*0.9,0,Math.PI*2);C.stroke();C.setLineDash([]);
-      if (d2(G.s,o)<o.r){C.globalAlpha=0.18+0.08*Math.sin(t*0.005);C.strokeStyle=`hsl(${o.hue},70%,65%)`;C.lineWidth=2;C.beginPath();C.arc(0,0,o.r*0.88,0,Math.PI*2);C.stroke();}
+      C.beginPath();C.arc(0,0,nr*0.9,0,Math.PI*2);C.stroke();C.setLineDash([]);
+      if (d2(G.s,o)<o.r){C.globalAlpha=0.18+0.08*Math.sin(pulse*2);C.strokeStyle=`hsl(${o.hue},70%,65%)`;C.lineWidth=2;C.beginPath();C.arc(0,0,nr*0.88,0,Math.PI*2);C.stroke();}
       C.globalAlpha=1;C.restore();
 
     } else { // crystal
@@ -717,6 +720,12 @@ function drawPlay(t) {
   // Ore HUD
   C.fillStyle='#44ffaa';C.font='500 12px system-ui,sans-serif';
   C.fillText('◆ '+G.ore,16,36);
+
+  // Synergy indicator
+  if (G.synergy) {
+    C.font='bold 10px system-ui,sans-serif';C.fillStyle='#ffdd44';
+    C.fillText('⚡ '+G.synergy.name,16,50);
+  }
 
   // Extraction timer HUD
   if (G.extraction.active) {
