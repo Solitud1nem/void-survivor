@@ -9,7 +9,7 @@ import { genWorld, initExtraction } from './world.js';
 import { trySpawnEnemies, trySpawnBoss, updateBoss, killBoss, killEn, spawnEn, updateEnemyFire, updateEBuls } from './enemies.js';
 import { initRender, draw, rRect } from './render.js';
 import {
-  W3, w3Init, w3Connect, w3SwitchChain, w3BuyOre, w3Toast,
+  W3, w3Init, w3Connect, w3SwitchChain, w3BuyOre, w3ConfirmBuy, w3CancelBuy, w3Toast,
   w3DrawToast, w3DrawConnectBtn, w3DrawShopPanel, initW3,
 } from './web3.js';
 
@@ -609,9 +609,14 @@ function endRun() {
 }
 
 function loop(ts) {
-  const dt=Math.min(ts-ts0,60);ts0=ts;
-  update(dt);
-  bR = draw(ts, { G, mX, mY, bR, hovI, shopSel, dt });
+  try {
+    const dt=Math.min(ts-ts0,60);ts0=ts;
+    update(dt);
+    bR = draw(ts, { G, mX, mY, bR, hovI, shopSel, dt });
+  } catch(e) {
+    console.error('[VS crash]', e);
+    G.ph = 'error';
+  }
   requestAnimationFrame(loop);
 }
 
@@ -663,6 +668,9 @@ function click(x,y) {
       else if (b.act==='w3connect') w3Connect();
       else if (b.act==='w3switch')  w3SwitchChain();
       else if (b.act==='w3buyore')  w3BuyOre(b.ore);
+      else if (b.act==='w3confirm') w3ConfirmBuy();
+      else if (b.act==='w3cancel')  w3CancelBuy();
+      else if (b.act==='reload')   location.reload();
       return;
     }
   }
@@ -683,6 +691,11 @@ CV.addEventListener('touchmove',e=>{
   e.preventDefault();[mX,mY]=cvXY(e.touches[0]);
   if(G.ph==='upgrade'){hovI=-1;bR.forEach((b,i)=>{if(b.act==='upgrade'&&mX>=b.x&&mX<=b.x+b.w&&mY>=b.y&&mY<=b.y+b.h)hovI=i;});}
 },{passive:false});
+
+// ── Автопауза ─────────────────────────────────────────
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && G.ph==='play') G.ph='pause';
+});
 
 // ── Клавиатура ─────────────────────────────────────────
 document.addEventListener('keydown',e=>{

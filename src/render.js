@@ -959,6 +959,22 @@ function drawFailed(t) {
   bR=[{x:bx,y:by,w:bw,h:bh,act:'play'},{x:hx,y:hy,w:hw,h:hh,act:'shop'}];
 }
 
+// ── Error screen ─────────────────────────────────────
+function drawError() {
+  C.fillStyle='#0a0a12';C.fillRect(0,0,W,H);
+  C.textAlign='center';C.textBaseline='middle';
+  C.font='500 28px system-ui,sans-serif';C.fillStyle='#ff4444';
+  C.fillText('Something went wrong',W/2,H/2-40);
+  C.font='13px system-ui,sans-serif';C.fillStyle='#ffffff66';
+  C.fillText('The game crashed. Click below to reload.',W/2,H/2-8);
+  const bw=180,bh=48,bx=W/2-bw/2,by=H/2+30;
+  const hv=mX>=bx&&mX<=bx+bw&&mY>=by&&mY<=by+bh;
+  rRect(bx,by,bw,bh,9);C.fillStyle=hv?'#882222':'#661111';C.fill();
+  C.font='500 16px system-ui,sans-serif';C.fillStyle='#fff';
+  C.fillText('RELOAD',W/2,by+bh/2);
+  bR=[{x:bx,y:by,w:bw,h:bh,act:'reload'}];
+}
+
 // ═══════════════════════════════════════════════════════
 //  GAME LOOP
 // ═══════════════════════════════════════════════════════
@@ -977,6 +993,7 @@ export function draw(ts, app) {
   else if (G.ph==='shop')    drawShop(ts);
   else if (G.ph==='success') drawSuccess(ts);
   else if (G.ph==='failed')  drawFailed(ts);
+  else if (G.ph==='error')   drawError();
   else                       drawOver(ts);
   // Toast поверх всего
   w3DrawToast(app.dt);

@@ -36,6 +36,7 @@ export const W3_CFG = {
 // ── State ─────────────────────────────────────────────
 export const W3 = { provider:null, signer:null, contract:null, address:null, connected:false, chainOk:false };
 let _toast='', _toastCol='#44aaff', _toastLife=0;
+let _pendingBuy=null; // { ore, cost, ethStr } — Canvas confirm popup
 
 // ── Functions ─────────────────────────────────────────
 export function w3Toast(msg,col='#44aaff'){ _toast=msg; _toastCol=col; _toastLife=3200; }
@@ -50,7 +51,7 @@ export async function w3Init(){
 function w3Reset(){ W3.provider=W3.signer=W3.contract=W3.address=null; W3.connected=W3.chainOk=false; }
 
 export async function w3Connect(silent=false){
-  if(typeof window.ethereum==='undefined'){ if(!silent)alert('Install MetaMask or Rabby'); return; }
+  if(typeof window.ethereum==='undefined'){ if(!silent)w3Toast('Install MetaMask or Rabby','#ff4444'); return; }
   try{
     const accs=await window.ethereum.request({method:silent?'eth_accounts':'eth_requestAccounts'});
     if(!accs.length) return;
@@ -87,23 +88,35 @@ export async function w3BuyOre(oreAmount){
   if(!W3.connected){ w3Connect(); return; }
   if(!W3.chainOk){ await w3SwitchChain(); return; }
   try{
+    w3Toast('Fetching price…','#44aaff');
     const cost=await W3.contract.priceFor(oreAmount);
     const ethStr=Number(ethers.formatEther(cost)).toFixed(6);
-    const ok=confirm(`Buy ${oreAmount.toLocaleString()} ore?\n\nCost: ${ethStr} ETH\nNetwork: ${W3_CFG.CHAIN_NAME}`);
-    if(!ok) return;
+    _pendingBuy={ ore:oreAmount, cost, ethStr };
+  }catch(e){
+    w3Toast('Error: '+(e.shortMessage||e.message||'').slice(0,48),'#ff4444');
+  }
+}
+
+export async function w3ConfirmBuy(){
+  if(!_pendingBuy) return;
+  const { ore, cost } = _pendingBuy;
+  _pendingBuy=null;
+  try{
     w3Toast('Sending…','#44aaff');
-    const tx=await W3.contract.buyOre(oreAmount,{value:cost});
+    const tx=await W3.contract.buyOre(ore,{value:cost});
     w3Toast('Confirming…','#44aaff');
     const receipt=await tx.wait();
     const iface=new ethers.Interface(W3_CFG.ABI);
     let got=0n;
     for(const log of receipt.logs){try{const p=iface.parseLog(log);if(p?.name==='OrePurchased'){got=p.args.amount;break;}}catch{}}
-    w3Credit(got>0n?Number(got):oreAmount);
+    w3Credit(got>0n?Number(got):ore);
   }catch(e){
     if(e.code===4001||e.code==='ACTION_REJECTED') w3Toast('Cancelled','#ffaa44');
     else w3Toast('Error: '+(e.shortMessage||e.message||'').slice(0,48),'#ff4444');
   }
 }
+
+export function w3CancelBuy(){ _pendingBuy=null; }
 
 function w3Credit(n){
   const app = _getApp();
@@ -198,6 +211,29 @@ export function w3DrawShopPanel(){
     C.font='500 11px system-ui,sans-serif'; C.fillStyle='#ffaa44';
     C.textAlign='center'; C.fillText('Switch Network',bx2+bw2/2,by2+bh2/2);
     return [{x:bx2,y:by2,w:bw2,h:bh2,act:'w3switch'}];
+  }
+
+  // ── Confirm popup ──
+  if(_pendingBuy){
+    rRect(px,py,pw,ph,8);C.fillStyle='rgba(4,12,24,0.96)';C.fill();
+    C.strokeStyle='#1e4a8a';C.lineWidth=1;C.stroke();
+    C.textAlign='center';C.textBaseline='middle';
+    C.font='500 14px system-ui,sans-serif';C.fillStyle='#fff';
+    C.fillText('Buy '+_pendingBuy.ore.toLocaleString()+' ore?',W/2,py+22);
+    C.font='12px system-ui,sans-serif';C.fillStyle='#ffdd44';
+    C.fillText(_pendingBuy.ethStr+' ETH  ·  '+W3_CFG.CHAIN_NAME,W/2,py+42);
+    const cbw=110,cbh=32,gap=16;
+    const cx1=W/2-cbw-gap/2,cx2=W/2+gap/2,cy=py+58;
+    const hv1=mX>=cx1&&mX<=cx1+cbw&&mY>=cy&&mY<=cy+cbh;
+    const hv2=mX>=cx2&&mX<=cx2+cbw&&mY>=cy&&mY<=cy+cbh;
+    rRect(cx1,cy,cbw,cbh,7);C.fillStyle=hv1?'#0a3322':'#061a11';C.fill();
+    C.strokeStyle='#22aa55';C.lineWidth=1;C.stroke();
+    C.font='500 13px system-ui,sans-serif';C.fillStyle='#44ffaa';
+    C.fillText('CONFIRM',cx1+cbw/2,cy+cbh/2);
+    rRect(cx2,cy,cbw,cbh,7);C.fillStyle=hv2?'#2a1a1a':'#1a0a0a';C.fill();
+    C.strokeStyle='#663333';C.lineWidth=1;C.stroke();
+    C.fillStyle='#aa6666';C.fillText('CANCEL',cx2+cbw/2,cy+cbh/2);
+    return [{x:cx1,y:cy,w:cbw,h:cbh,act:'w3confirm'},{x:cx2,y:cy,w:cbw,h:cbh,act:'w3cancel'}];
   }
 
   const btns=[];
