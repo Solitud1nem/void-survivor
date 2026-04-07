@@ -4,12 +4,14 @@
 
 Игра переходит с монолитного HTML на **Vite-based модульную структуру** с сохранением Canvas 2D рендера.
 Бэкенд — Cloudflare Workers + D1 (serverless, бесплатный tier).
-Блокчейн — ethers.js v6, Base Sepolia → Mainnet.
+Блокчейн — **viem** (заменяет ethers.js v6), Base Mainnet.
+Дистрибуция — voidsurvivor.xyz + **Base App** (join.base.app, standard web app).
 
 ```
 Браузер (Canvas 2D + Vite build)
-    ↕ ethers.js v6
-Base Blockchain (VoidOreMinter.sol)
+    ↕ viem (EIP-1193 / window.ethereum)
+Base Blockchain (VoidOreMinter.sol, chain ID 8453)
+    ↕ CDP Paymaster (gasless транзакции)
     ↕ fetch API
 Cloudflare Workers (REST API)
     ↕ D1 SQL
@@ -22,146 +24,114 @@ Cloudflare D1 (players, runs, purchases)
 
 | Слой | Технология | Статус |
 |------|-----------|--------|
-| Игровой движок | Vanilla JS + Canvas 2D | ✅ v5 готово |
-| Сборка | Vite 5 | 📋 миграция |
-| Хостинг | Cloudflare Pages | 📋 миграция |
+| Игровой движок | Vanilla JS + Canvas 2D | ✅ готово |
+| Сборка | Vite 5 | ✅ готово |
+| Хостинг | Cloudflare Pages (voidsurvivor.xyz) | 📋 деплой |
 | Бэкенд | Cloudflare Workers | 📋 |
 | База данных | Cloudflare D1 (SQLite) | 📋 |
-| Blockchain | Base Sepolia → Mainnet | Sepolia ✅ |
+| Blockchain | Base Mainnet (chain ID 8453) | Sepolia ✅ |
 | Контракт ore | VoidOreMinter.sol | ✅ Sepolia |
-| Web3 клиент | ethers.js v6 | ✅ |
+| Web3 клиент | **viem** (заменяет ethers.js v6) | 📋 миграция B2 |
+| Paymaster | CDP Paymaster (gasless) | 📋 задача B4 |
+| Мобайл | Touch: auto-aim + virtual joystick | 📋 задача B3 |
+| Дистрибуция | Base App (standard web app) | 📋 задача B1 |
 | Деплой агент | Claude Code | основной |
 
 **Ключевые зависимости:**
-- `vite` — сборка, HMR в разработке, единый HTML на выходе
-- `ethers` v6 — Web3 интеграция
+- `vite` — сборка, HMR в разработке
+- `viem` — Web3: wallet connection, contract calls, EIP-191 signing
 - `wrangler` — деплой на Cloudflare Workers и Pages
 
 ---
 
-## Структура директорий
+## Base App интеграция
+
+> После April 9, 2026 Base App = стандартный web app + кошелёк.
+> Farcaster манифест НЕ нужен. MiniKit НЕ нужен. Next.js НЕ нужен.
+
+**Минимальные требования:**
+1. Игра загружается в мобильном браузере (WebView) ✅
+2. Wallet connection через viem (EIP-1193) 📋 задача B2
+3. Зарегистрировано на base.dev с метаданными 📋 задача B1
+
+**Не требуется:** Vercel, Farcaster аккаунт, React, Next.js.
+
+---
+
+## Структура файлов (текущая)
 
 ```
 void-survivor/
 ├── src/
-│   ├── main.js              # Точка входа: инит игры, game loop
 │   ├── config.js            # Константы: размеры мира, балансировка
-│   ├── state.js             # Глобальный объект G (игровое состояние)
-│   ├── game/
-│   │   ├── world.js         # genWorldForWave(), препятствия, мини-карта
-│   │   ├── enemies.js       # Враги: spawn, update, resetEnemyQueue()
-│   │   ├── bosses.js        # Boss система: Harbinger, Colossus, Phantom
-│   │   ├── player.js        # Движение, collision, смерть
-│   │   ├── weapons.js       # Оружия, пули, вражеские пули (G.eBuls)
-│   │   ├── mining.js        # Сканирование, добыча руды, дроп
-│   │   ├── extraction.js    # ExtractionZone, таймер, SUCCESS/FAILED
-│   │   └── upgrades.js      # Level up, пассивки, выбор апгрейда
-│   ├── render/
-│   │   ├── renderer.js      # Главный draw loop
-│   │   ├── hud.js           # HUD: HP, ore, таймер, стрелка к Extraction
-│   │   ├── effects.js       # Damage numbers, weapon trails, смерть-debris
-│   │   └── minimap.js       # Мини-карта
-│   ├── ui/
-│   │   ├── screens.js       # Menu, Hangar, Game Over, SUCCESS/FAILED
-│   │   └── shop.js          # Магазин кораблей
-│   └── web3/
-│       ├── wallet.js        # Подключение, EIP-1193, chain check
-│       ├── contract.js      # VoidOreMinter ABI, buyOre(), getBalance()
-│       └── backend.js       # fetch к Cloudflare Workers API
-├── workers/
-│   ├── api.js               # Cloudflare Worker: роутер
-│   ├── routes/
-│   │   ├── save-run.js      # POST /api/save-run
-│   │   ├── leaderboard.js   # GET /api/leaderboard
-│   │   └── player.js        # GET /api/player/:addr
-│   └── schema.sql           # D1 схема
+│   ├── state.js             # META (localStorage), mkG()
+│   ├── world.js             # genWorld(), препятствия
+│   ├── enemies.js           # spawn, update, boss, killEn, updateEBuls
+│   ├── render.js            # ВСЁ рендерение (~985 строк)
+│   ├── web3.js              # wallet, contract, buyOre — мигрируем на viem (B2)
+│   └── main.js              # game loop, update(), input
+├── workers/                 # Cloudflare Workers (INFRA SPRINT)
+│   ├── api.js
+│   └── routes/
 ├── contracts/
-│   └── VoidOreMinter.sol    # Уже задеплоен на Sepolia
-├── index.html               # Точка входа Vite
+│   └── VoidOreMinter.sol    # Base Sepolia → Mainnet (D4)
+├── index.html
 ├── vite.config.js
 ├── wrangler.toml
-├── PRD.md
-├── PLANNING.md
-├── AGENTS.md
-└── TASKS.md
+└── SDD: PRD.md, PLANNING.md, AGENTS.md, TASKS.md
 ```
 
 ---
 
-## Ключевые компоненты
+## Миграция viem (задача B2)
 
-### world.js
-- `genWorld()` — генерация карты (один раз при старте рана)
-- `genObstacles(wave)` — создаёт астероиды, туманности, кристаллы с учётом локации
+Замена ethers.js v6 на viem в src/web3.js:
 
-### enemies.js
-- `trySpawnEnemies()` — каждые ~2 сек, если < 5 видимых врагов → шанс спавна
-- `SPAWN_RATES`: seek 60%, fast 30%, heavy 15% (множитель от локации)
-- Враги спавнятся непрерывно, волновой системы нет
+```js
+// ДО (ethers.js v6)
+import { ethers } from 'ethers';
+const provider = new ethers.BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+const contract = new ethers.Contract(addr, abi, signer);
+const tx = await contract.buyOre(pkg, { value: ethers.parseEther('0.01') });
 
-### extraction.js
-- `ExtractionZone` объект: `{ x, y, radius: 80, active: true }`
-- `updateExtraction(dt)` — таймер, проверка коллизии с игроком
-- `renderExtractionZone(ctx)` — пульсирующий зелёный круг
-- `hudArrowToExtraction(ctx)` — стрелка на HUD
+// ПОСЛЕ (viem)
+import { createWalletClient, createPublicClient, custom, http, parseEther, getContract } from 'viem';
+import { base } from 'viem/chains';
 
-### bosses.js
-- `trySpawnBoss()` — рандомный спавн (4% шанс за тик), max 2 за ран, max 1 одновременно
-- Босс: HP 500, преследует игрока, стреляет в позицию игрока каждые 2 сек
-- Дроп: 5-10 руды + XP gems
-- `updateBoss(dt)`, `killBoss()`, `drawBoss(t)` — логика и рендер
-- Boss HP bar — широкая полоска сверху экрана
-
-### backend.js
-- `saveRun(runData, signature)` → `POST /api/save-run`
-- `getLeaderboard()` → `GET /api/leaderboard`
-- Подпись: `ethers.signMessage(JSON.stringify(runData))`
-
----
-
-## Модели данных (Cloudflare D1)
-
-```sql
--- schema.sql
-CREATE TABLE players (
-  address TEXT PRIMARY KEY,
-  ore_total INTEGER DEFAULT 0,
-  runs_count INTEGER DEFAULT 0,
-  best_score INTEGER DEFAULT 0,
-  created_at INTEGER
-);
-
-CREATE TABLE runs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  address TEXT,
-  score INTEGER,
-  wave INTEGER,
-  ore INTEGER,
-  ship_id INTEGER,
-  extracted INTEGER,  -- 1=success, 0=failed
-  timestamp INTEGER
-);
+const walletClient = createWalletClient({ chain: base, transport: custom(window.ethereum) });
+const publicClient = createPublicClient({ chain: base, transport: http() });
+const [address] = await walletClient.requestAddresses();
+const contract = getContract({ address: addr, abi, client: walletClient });
+const tx = await contract.write.buyOre([pkg], { value: parseEther('0.01') });
 ```
 
+**Публичный интерфейс web3.js НЕ меняется:** `W3.address`, `W3.connected`, `w3Toast`, `w3BuyOre`, `w3DrawShopPanel` — остаются прежними. Меняется только внутренняя реализация.
+
 ---
 
-## API (Cloudflare Workers)
+## Touch controls (задача B3)
 
-| Метод | Путь | Описание |
-|-------|------|---------|
-| POST | `/api/save-run` | Сохранить результат рана (с подписью) |
-| GET | `/api/leaderboard` | Топ-10 по ore_total |
-| GET | `/api/player/:addr` | Статистика одного игрока |
+**Auto-aim:** в play-фазе `G.s.aimAng` автоматически направляется к ближайшему врагу.
+- На desktop: мышь override aimAng (обратная совместимость сохраняется)
+- На мобайле: без мыши — работает только auto-aim
 
-Аутентификация: `X-Signature` header = EIP-191 подпись тела запроса.
+**Виртуальный джойстик:** рисуется в render.js поверх игры ТОЛЬКО если `G.touchMode = true`.
+- Определение: `G.touchMode = ('ontouchstart' in window)`
+- Позиция: левый нижний угол, 20px отступ
+- Touch events в main.js → обновляют `G.joystick: { dx, dy }` (-1..1)
+- В update(): если `G.touchMode`, движение от `G.joystick` вместо WASD
 
 ---
 
 ## Порядок реализации (Milestones)
 
-1. ~~**Bugfix** — фикс map reset~~ ✅ ГОТОВО
-2. ~~**Extraction Mode** — зона, таймер, SUCCESS/FAILED, локации~~ ✅ ГОТОВО
-3. ~~**Враги и боссы** — убраны волны, непрерывный спавн, босс с пушкой~~ ✅ ГОТОВО
-4. **Vite миграция** — разбить монолит на модули по структуре выше
-5. **Cloudflare Workers + D1** — бэкенд API, лидерборд
-6. **Cloudflare Pages деплой** — заменить GitHub Pages
+1. ~~Bugfix — фикс map reset~~ ✅
+2. ~~Extraction Mode~~ ✅
+3. ~~Враги и боссы~~ ✅
+4. ~~Vite миграция~~ ✅
+5. **Стабилизация** — S1, S2, S3
+6. **Deploy** — D1, D2, D3+B1, D4
+7. **Base App** — B2 (viem), B4 (Paymaster), B3 (touch)
+8. **Infra** — M4-1 ... M4-6 (Cloudflare Workers + D1)
+9. **Gameplay Sprint 2** — GD1, G3-1

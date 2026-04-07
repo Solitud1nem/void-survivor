@@ -1,189 +1,229 @@
-# AGENTS.md — Void Survivor v6
+# AGENTS.md — Void Survivor
 
-> Этот файл читает Claude Code перед каждой сессией. Содержит всё необходимое для работы с проектом.
+> Читай этот файл ПЕРВЫМ перед каждой сессией. Он содержит всё необходимое.
 
 ---
 
 ## Контекст проекта
 
-Void Survivor — браузерная Web3 игра (extraction shooter, стиль Vampire Survivors).
-Canvas 2D, 600×600px viewport, мир 2400×2400. Vanilla JS, переходим на Vite.
-Контракт VoidOreMinter.sol задеплоен на Base Sepolia.
-Бэкенд — Cloudflare Workers + D1 (в разработке).
+Void Survivor — браузерный extraction shooter. Canvas 2D, 960×540, мир 3600×3600.
+Vanilla JS + Vite. Web3 опциональный (**viem**, Base Mainnet, chain ID 8453).
+Целевая платформа: voidsurvivor.xyz + **Base App** (join.base.app).
 
-**Живая версия:** https://solitud1nem.github.io/void-survivor/
-
----
-
-## Технический стек
-
-- **Язык**: JavaScript (ES2022, ESModules)
-- **Сборка**: Vite 5 (`npm run dev` / `npm run build`)
-- **Рендер**: Canvas 2D API — без WebGL, без Three.js, без React
-- **Web3**: ethers.js v6
-- **Бэкенд**: Cloudflare Workers (wrangler), D1 (SQLite)
-- **Деплой**: Cloudflare Pages (`wrangler pages deploy`)
-- **Тесты**: нет (игровая логика — ручное тестирование через браузер)
+**Текущая ветка:** vite-v6
+**Запуск:** `npm install && npm run dev` → localhost:5173
+**Билд:** `npm run build` → dist/
 
 ---
 
-## Структура кода
+## Структура файлов
 
 ```
 src/
-  main.js          — game loop, инит
-  config.js        — константы (WORLD_W, WORLD_H, WAVE_ENEMY_BASE и т.д.)
-  state.js         — объект G: { player, enemies, bosses, ores, bullets, ... }
-  game/
-    world.js       — genWorldForWave(w), препятствия, мини-карта
-    enemies.js     — spawn, update, resetEnemyQueue(w)
-    bosses.js      — BossManager, Harbinger, Colossus, PhantomWraith
-    player.js      — движение, collision, smert
-    weapons.js     — оружия, G.buls, G.eBuls (вражеские пули)
-    mining.js      — scan, добыча, дроп руды
-    extraction.js  — ExtractionZone, таймер, SUCCESS/FAILED
-    upgrades.js    — levelup, пассивки
-  render/
-    renderer.js    — главный draw()
-    hud.js         — HP bar, ore counter, таймер, стрелка
-    effects.js     — damage numbers, trails, debris
-    minimap.js     — мини-карта (правый верхний угол)
-  ui/
-    screens.js     — Menu, Hangar, GameOver, Success, Failed
-    shop.js        — покупка кораблей за кредиты
-  web3/
-    wallet.js      — connect(), switchChain(), getAddress()
-    contract.js    — buyOre(), getOreBalance()
-    backend.js     — saveRun(), getLeaderboard()
-workers/
-  api.js           — роутер Worker
-  routes/          — save-run.js, leaderboard.js, player.js
-  schema.sql       — D1 схема
+  config.js   103 строки  — ВСЕ константы: размеры, балансировка, корабли, апгрейды
+  state.js     73 строки  — META (localStorage), mkG() — фабрика состояния
+  world.js     90 строк   — genWorld(), initExtraction() — генерация карты
+  enemies.js  160 строк   — spawn, update, boss, killEn, updateEBuls
+  render.js   985 строк   — ВСЁ рендерение: draw(), HUD, экраны, эффекты
+  web3.js     222 строки  — wallet, contract, buyOre, toast, shop panel
+                            СТЕК: viem (после задачи B2, до — ethers.js v6)
+  main.js     715 строк   — game loop, update(), input, координация модулей
+```
+
+**Зависимости модулей (не нарушать):**
+```
+config.js  ← никого не импортирует
+state.js   ← config.js
+world.js   ← config.js
+enemies.js ← config.js
+render.js  ← config.js, state.js
+web3.js    ← config.js, state.js
+main.js    ← всё остальное
 ```
 
 ---
 
-## Ключевые переменные состояния (объект G)
+## Ключевые объекты
 
+### G — игровое состояние (из mkG() в state.js)
 ```js
-// state.js — глобальный объект игры
-const G = {
-  // Игрок
-  player: { x, y, hp, maxHp, ang, ship, ore, credits, xp, wave, score },
+G = {
+  ph: 'menu',           // фаза: menu|play|pause|upgrade|shop|success|failed|over|error
+  score, lvl, xp, xpMax, gameT, banT,
+  parts[], gems[], buls[], eBuls[], ens[], orbs[], dmgNums[], debris[],
+  deathAnim,
+  choices[], chainFl, boss, bossCount, spawnT, synergy,
+  obs[], cam:{x,y},
+  ore, scanEnergy, scanRegen, scanPulse, scanPulseR, revealedEns[],
+  mining,               // null или { obs, t, maxT }
+  extraction: { zone, timer, playerInZone, active },
+  s: { x, y, vx, vy, hp, mhp, ang, aimAng, invT, passive, u:{} },
+  location,             // объект из LOCATIONS[]
+  shopFrom, earnedCredits, lostOre,
+  touchMode,            // bool: true если touch-устройство (задача B3)
+  joystick: { dx, dy }, // -1..1 от виртуального джойстика (задача B3)
+}
+```
 
-  // Мир
-  asts: [],      // астероиды { x, y, r, type: 'poor'|'medium'|'rich', hp }
-  crystals: [],  // кристаллы { x, y, r, hp }
-  nebs: [],      // туманности { x, y, rx, ry }
+### META — мета-прогресс (localStorage, из state.js)
+```js
+META = { credits, ore, owned:[], selected:'vanguard', hi }
+// Сохраняется через saveMeta() — всегда вызывать после изменений
+```
 
-  // Враги и боссы
-  enemies: [],   // { x, y, hp, type: 'seek'|'heavy'|'fast', ... }
-  boss: null,    // текущий босс или null
+### bR — кнопки (возвращается из draw(), используется в click())
+```js
+// Каждый элемент: { x, y, w, h, act, ...доп. поля }
+// act: 'play'|'shop'|'back'|'upgrade'|'buy'|'select'|'w3connect'|...
+```
 
-  // Пули
-  buls: [],      // пули игрока { x, y, vx, vy, dmg, col, trail:[] }
-  eBuls: [],     // пули врагов { x, y, vx, vy, dmg }
+---
 
-  // Extraction
-  extraction: {
-    zone: null,       // { x, y, radius: 80 }
-    timer: 0,         // секунды до конца рана (180-300)
-    playerInZone: 0,  // секунды внутри зоны (нужно 3)
-    active: false,
-  },
+## КРИТИЧЕСКИЕ ПРАВИЛА
 
-  // Эффекты
-  dmgNums: [],   // { x, y, val, life, col, vy }
-  particles: [], // { x, y, vx, vy, life, col, r }
+### 1. Game loop — всегда в try/catch
+```js
+function loop(ts) {
+  try {
+    const dt = Math.min(ts-ts0, 60); ts0=ts;
+    update(dt);
+    bR = draw(ts, { G, mX, mY, bR, hovI, shopSel, dt });
+  } catch(e) {
+    console.error('[VS crash]', e);
+    G.ph = 'error';
+  }
+  requestAnimationFrame(loop);
+}
+```
 
-  // Мета
-  phase: 'menu', // 'menu'|'hangar'|'playing'|'paused'|'gameover'|'success'|'failed'
-  cam: { x: 0, y: 0 }, // смещение камеры
-};
+### 2. Лимит строк — СТОП если файл > 1200 строк
+```bash
+wc -l src/*.js
+```
+- Если `render.js` > 1200 → сначала вынести один блок, потом добавлять фичу
+
+### 3. Никаких confirm() / alert()
+```js
+// ЗАПРЕЩЕНО: confirm(...), alert(...)
+// ПРАВИЛЬНО: Canvas-попап через bR + rRect (см. w3DrawShopPanel в web3.js)
+```
+
+### 4. visibilitychange — обязательно
+```js
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && G.ph === 'play') G.ph = 'pause';
+});
+```
+
+### 5. G должен быть сериализуем
+```js
+// Не добавлять функции внутрь G или G.s
+// Проверка: JSON.stringify(G) не должна бросать ошибку
+```
+
+### 6. saveMeta() после каждого изменения META
+```js
+META.credits += earned;
+saveMeta(); // обязательно
 ```
 
 ---
 
 ## Правила стиля
 
-- **Нет TypeScript** — чистый JS с JSDoc-комментариями для сложных функций
-- **Нет классов** для игровых объектов — простые объекты `{}` и функции
-- **Исключение**: боссы (`Harbinger`, `Colossus`, `PhantomWraith`) — классы с `update(dt)` и `render(ctx)`
-- Константы — в `config.js`, не хардкодить в логике
-- Все размеры и таймеры — через `config.js`
-- Canvas `ctx` всегда передаётся как аргумент, не глобальная переменная
-- Функции — максимум 40-50 строк, потом разбиваем
+- Чистый ES2022, без TypeScript
+- Утилиты (`rn`, `ri`, `d2`, `a2`, `clamp`, `lerp`) — определены в main.js, не дублировать
+- Константы — только в config.js, не хардкодить в логике
+- Canvas ctx `C` — глобальный в render.js, передаётся через initRender()
+- Функции — не длиннее 50 строк без крайней необходимости
+- Комментарии секций: `// ── Название ──────────────`
 
 ---
 
-## Запрещённые паттерны
+## Web3 — viem (актуально после задачи B2)
 
-- **Не трогать `genWorldForWave()`** при level up — только `resetEnemyQueue()`
-- Не добавлять глобальные переменные кроме `G` и `CV` (canvas)
-- Не писать логику рендера в `game/` файлах — только `render/`
-- Не изменять файлы `web3/` без явного указания задачи
-- Не использовать `innerHTML` или DOM-манипуляции — только Canvas
-- Не вызывать `fetch` из игровой логики — только через `web3/backend.js`
+```js
+import { createWalletClient, createPublicClient, custom, http, parseEther, getContract } from 'viem';
+import { base } from 'viem/chains';
 
----
+// Wallet connection
+const walletClient = createWalletClient({ chain: base, transport: custom(window.ethereum) });
+const publicClient = createPublicClient({ chain: base, transport: http() });
+const [address] = await walletClient.requestAddresses();
 
-## Лимит размера файлов — КРИТИЧНО
+// Contract call
+const contract = getContract({ address: CONTRACT_ADDR, abi: ABI, client: walletClient });
+const hash = await contract.write.buyOre([pkgIndex], { value: parseEther('0.01') });
 
-**Перед каждой задачей:**
-```bash
-wc -l src/main.js src/render.js src/web3.js 2>/dev/null
+// EIP-191 подпись (для save-run API)
+const sig = await walletClient.signMessage({ message: JSON.stringify(runData) });
 ```
 
-**Правила:**
-- Любой файл > 1500 строк → СТОП, сначала вынести следующий логический блок
-- Не добавлять новую фичу в файл > 1500 строк — только рефакторинг
-- main.js должен содержать только: game loop, логику обновления, input. Всё остальное — в модулях
+**Публичный интерфейс web3.js не меняется:** `W3.address`, `W3.connected`, `w3Toast(msg, col)`, `w3BuyOre(pkg)`, `w3DrawShopPanel()`, `w3Migrate()`.
 
-**Целевая структура после рефакторинга:**
-- `src/config.js`  — ~80 строк (все константы)
-- `src/state.js`   — ~100 строк (mkG(), META)
-- `src/world.js`   — ~200 строк (генерация карты, препятствия)
-- `src/enemies.js` — ~250 строк (spawn, update, коллизии)
-- `src/render.js`  — ~600 строк (все draw* функции, HUD, minimap)
-- `src/web3.js`    — ~200 строк (wallet, contract, ethers.js)
-- `src/main.js`    — ~600 строк (game loop, update, input handlers)
+### Base App — важные детали
+- Base App инжектирует `window.ethereum` (EIP-1193) в WebView — viem работает как обычно
+- Chain ID: 8453 (Base Mainnet)
+- Игра зарегистрирована на base.dev → `https://voidsurvivor.xyz`
+- Paymaster (после B4): CDP Paymaster URL настраивается в walletClient transport
 
 ---
 
-## Workflow-правила для Claude Code
+## Touch controls (актуально после задачи B3)
 
-1. **Перед началом**: прочитай PRD.md, PLANNING.md, текущую задачу из TASKS.md
-2. **Один файл за раз**: изменяй только файлы, указанные в задаче
-3. **После изменений**: скажи что изменил и как проверить в браузере
-4. **Extraction timer**: всегда в секундах в `G.extraction.timer`, не мс
-5. **Boss spawn**: через `BossManager.spawnIfNeeded(G.player.wave)` после каждой wavecomplete
-6. **Коммиты**: `feat(extraction): add zone timer and HUD arrow` / `fix(world): separate genWorld from resetEnemyQueue`
-7. **Если задача неясна** — спроси, не додумывай
+```js
+// Определение в main.js при инициализации:
+G.touchMode = ('ontouchstart' in window);
+G.joystick = { dx: 0, dy: 0 };
+
+// В update(): если G.touchMode — движение от джойстика
+if (G.touchMode) {
+  G.s.vx += G.joystick.dx * SHIP.spd;
+  G.s.vy += G.joystick.dy * SHIP.spd;
+}
+
+// Auto-aim: в play-фазе aimAng → ближайший враг
+// Desktop: мышь overrides aimAng (обратная совместимость)
+```
+
+Джойстик рисуется в render.js ТОЛЬКО если `G.touchMode === true`.
 
 ---
 
-## Как запустить локально
+## Workflow для Claude Code
+
+1. **Перед задачей:** прочитай PRD.md, PLANNING.md, TASKS.md
+2. **Проверь размер файлов:** `wc -l src/*.js`
+3. **Изменяй только файлы из задачи**
+4. **После изменений:** скажи что изменил и как проверить в браузере (`npm run dev`)
+5. **Коммит:** `feat(web3): migrate to viem`
+6. **Если задача неясна** — спроси, не додумывай
+
+---
+
+## Частые ошибки — НЕ ДЕЛАЙ
+
+- Не вызывать `genWorld()` при level up — только при старте рана
+- Не добавлять render-логику в game-модули (world/enemies/main)
+- Не вызывать `fetch()` из игровой логики — только через web3.js
+- Не изменять структуру `bR` — это контракт между draw() и click()
+- Не ставить `async` на `loop()` — requestAnimationFrame не ждёт промисов
+- Не использовать DOM-манипуляции кроме `updHUD()` — только Canvas
+- Не импортировать React/wagmi — проект vanilla JS, web3 через viem напрямую
+
+---
+
+## Запуск и деплой
 
 ```bash
+# Разработка
 npm install
-npm run dev        # Vite dev server на localhost:5173
-npm run build      # Сборка в dist/
-npm run preview    # Предпросмотр билда
-```
+npm run dev          # localhost:5173, HMR
 
-## Как задеплоить
+# Продакшн
+npm run build        # → dist/
+npm run preview      # предпросмотр dist/
 
-```bash
-# Cloudflare Pages
+# Деплой (Cloudflare Pages)
 wrangler pages deploy dist --project-name void-survivor
-
-# Cloudflare Worker
-wrangler deploy workers/api.js
 ```
-
----
-
-## Известные баги (не трогай, пока не дойдёт очередь)
-
-- `tryUpgrade('levelup')` вызывает `spawnWave()` → карта пересоздаётся → **первая задача в TASKS.md**
-- Weapons иногда стреляют по невидимым врагам (за экраном) — низкий приоритет после v5

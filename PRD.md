@@ -1,97 +1,121 @@
-# Void Survivor — PRD (v6 Sprint)
+# Void Survivor — PRD v6
 
 ## Описание
 
-Void Survivor — браузерная Web3 игра в стиле extraction shooter. Игрок выбирает корабль, дропается на процедурно сгенерированную карту, добывает руду, выживает против волн врагов и пытается эвакуироваться. Прогресс и экономика частично on-chain (Base).
+Void Survivor — браузерный extraction shooter. Игрок выбирает корабль, дропается на
+процедурно сгенерированную карту, добывает руду, выживает против врагов и боссов,
+эвакуируется через Extraction Zone. Прогресс хранится между сессиями. Web3 (Base)
+опциональный — покупка руды за ETH, накопительный META.ore.
 
-Текущее состояние: **v5 задеплоена** на GitHub Pages, контракт VoidOreMinter на Base Sepolia. Код — монолитный HTML-файл (~1500 строк vanilla JS + Canvas 2D).
-
-**Живая версия:** https://solitud1nem.github.io/void-survivor/  
-**Контракт:** 0x565176FAfB4046626C87982cae4a25ACa1dFCFdB (Base Sepolia)
+**Ветка:** vite-v6 | **Деплой:** Cloudflare Pages → voidsurvivor.xyz
+**Контракт:** Base Sepolia 0x565176FAfB4046626C87982cae4a25ACa1dFCFdB → Base Mainnet (D4)
+**Целевые платформы:** voidsurvivor.xyz + **Base App** (join.base.app)
 
 ---
 
-## Проблема
+## Статус реализации
 
-1. **Баг**: карта полностью пересоздаётся при level up (вместо только сброса врагов) — критично для геймплея.
-2. **Нет retention**: прогресс хранится только в localStorage, нет бэкенда, нет лидерборда — игроки не возвращаются.
-3. **Монолит**: весь код в одном HTML-файле, добавление каждой новой фичи — хирургия. Тяжело работать с Claude Code.
-4. **Нет Extraction loop**: игра сейчас — бесконечные волны без цели. Нет победного условия, нет напряжения.
+### Готово
+- Canvas 2D, 960×540 (16:9), мир 3600×3600
+- 6 кораблей с уникальными пассивками и статами
+- Extraction Mode: 4 локации, таймер, SUCCESS/FAILED экраны
+- Система боссов: рандомный спавн, стрельба, дроп руды
+- Враги стреляют (G.eBuls, 3 типа с разными параметрами)
+- Weapon synergies: Bolt Arc, Nova Burst, Storm, Charged Orbs
+- Damage numbers, weapon trails, цветные искры, анимация смерти
+- Engine glow, анимированные туманности, параллакс
+- META-прогресс: credits, ore, корабли — localStorage + wallet-binding
+- Web3: connect wallet, buy ore, Base Sepolia — полностью опциональный
+- Модульная архитектура: config / state / world / enemies / render / web3 / main
+- Vite build pipeline
+
+### В работе / планируется
+- **S1-S3:** Стабилизация (game loop try/catch, autopause, canvas popup)
+- **D1-D4:** Деплой (Cloudflare Pages, домен, Base Mainnet контракт)
+- **B1:** base.dev регистрация (параллельно с D3)
+- **B2:** Миграция web3.js: ethers.js v6 → viem
+- **B3:** Touch controls: auto-aim + virtual joystick
+- **B4:** CDP Paymaster (gasless транзакции)
+- **M4:** Cloudflare Workers + D1 бэкенд (лидерборд, save-run)
+- **GD1/G3-1:** Уникальные враги по локациям
 
 ---
 
 ## Целевые пользователи
 
-- **Основной**: Alex (разработчик-одиночка), использует Claude Code для расширения функциональности
-- **Игроки**: casual Web3-геймеры, знакомые с браузерными играми и кошельками (MetaMask/Rabby)
-- **Контекст**: играют в браузере, без установки, с подключённым кошельком
+- **Crypto-native геймеры на Base App** — основная новая аудитория
+- **Casual Web3-геймеры** — знакомы с кошельками, ищут простую браузерную игру
+- **Новые игроки без Web3** — игра полностью работает без кошелька, Web3 = бонус
 
 ---
 
-## Основные функции MVP (v6 Sprint)
+## Ключевые функции MVP
 
-### 1. Фикс map reset бага
-- **Проблема**: `tryUpgrade('levelup')` вызывает `spawnWave()` → полный пересоздание мира
-- **Фикс**: разделить на `genWorldForWave(w)` (только при wavecomplete) и `resetEnemyQueue(w)` (при levelup)
-- **Вход**: event level up
-- **Выход**: враги ресетятся, карта и руда остаются на месте
-- **Критерий**: при level up позиции астероидов/кристаллов не меняются
+### Gameplay
+- Extraction loop: дроп → таймер → добывай/выживай → эвакуируйся
+- 4 локации с разной сложностью
+- Прокачка per-ран: 8 апгрейдов, weapon synergies
+- Боссы: рандомный спавн, max 2 за ран
 
-### 2. Extraction Mode
-- **Дроп на карту → таймер 3-5 мин → добывай/выживай → найди Extraction Zone → эвакуируйся**
-- Extraction Zone: зелёный пульсирующий круг, стрелка на HUD
-- За 60 сек до конца — WARNING на экране
-- 3 сек внутри зоны → SUCCESS (ore записывается в localStorage + будущий бэкенд)
-- Не добрался → FAILED (ore за вылазку теряется, XP −50%)
-- Экраны: SUCCESS / FAILED с итогами рана
+### Прогресс
+- META.ore — накопительная руда между ранами
+- META.credits — валюта для покупки кораблей
+- Привязка к кошельку: `vs_meta_<address>` в localStorage
 
-### 3. Система боссов (Milestone 2)
-- Каждые 5 волн — босс-спавн
-- **Boss #1 — Harbinger** (волна 5): вращается, стреляет по спирали, при 50% HP ускоряется
-- **Boss #2 — Colossus** (волна 10): медленный, призывает миньонов, берсерк при 30%
-- **Boss #3 — Phantom Wraith** (волна 15+): телепортируется каждые 3 сек, невидим 1 сек
-- Boss HP bar отдельный, крупный, сверху экрана
-- Дроп с босса: weapon unlock или permanent buff на ран
+### Web3 (опциональный)
+- Покупка руды за ETH: 3 пакета (1K / 5K / 15K ore)
+- **Gasless транзакции** через CDP Paymaster (задача B4)
+- Игра работает без кошелька — никакого блокирующего экрана
+- Нет confirm()/alert() — только Canvas-нативные попапы
 
-### 4. Модуляризация кода (Milestone 3)
-- Переход с монолитного HTML на Vite + модули
-- Структура: `src/game/`, `src/web3/`, `src/ui/`
-- Итоговый билд: один минифицированный HTML (совместимость без изменений)
-- Цель: чтобы Claude Code мог работать с отдельными файлами, а не с 1500-строчным монолитом
-
-### 5. Бэкенд (Milestone 4, параллельно или после)
-- Cloudflare Workers: `POST /api/save-run`, `GET /api/leaderboard`
-- Cloudflare D1: таблицы `players`, `runs`
-- Аутентификация: EIP-191 подпись кошельком (без аккаунтов)
-- Лидерборд в игре (отдельный экран)
+### Base App интеграция
+- Standard web app: загружается в WebView Base App
+- Wallet через viem + window.ethereum (EIP-1193)
+- Зарегистрировано на base.dev
+- Touch controls: auto-aim + virtual joystick для мобайла
 
 ---
 
-## Вне скоупа (этот спринт)
+## Критерии качества
 
-- Мультиплеер / WebSocket / Durable Objects
-- NFT корабли (VoidShips.sol / ERC-721)
-- Base Mainnet деплой (ждём стабильного геймплея)
-- Мобильный Capacitor wrapper
-- Сезонная система (VoidSeason.sol)
+### Стабильность (приоритет #1)
+- [ ] Game loop обёрнут в try/catch — крэш не замораживает игру молча (S1)
+- [ ] При ошибке показывается экран с кнопкой "Reload" вместо зависания (S1)
+- [ ] `visibilitychange` → автопауза при переключении вкладки (S2)
+- [ ] `dt` ограничен 60мс (уже реализовано)
+
+### UX
+- [ ] Игра полностью работает без подключённого кошелька
+- [ ] Нет нативных `confirm()` / `alert()` — только Canvas-попапы (S3)
+- [ ] Работает в мобильном браузере (WebView Base App)
+- [ ] Touch controls не ломают desktop-режим (B3)
+
+### Web3
+- [ ] Wallet connection через viem (B2)
+- [ ] Gasless покупка через Paymaster (B4)
+- [ ] Контракт верифицирован на Base Mainnet (D4)
+
+### Код
+- [ ] Ни один файл не превышает 1200 строк
+- [ ] G полностью сериализуем через JSON.stringify(G)
+
+---
+
+## Вне скоупа (текущий этап)
+
+- Мультиплеер / WebSocket — после полировки одиночных механик
+- ore→ETH пул обмена — после аудита экономики
+- NFT корабли — после Mainnet стабилизации
+- Сезонная система с призами
 - PvP арены
-
----
-
-## Критерии успеха
-
-- [ ] Карта не пересоздаётся при level up (баг исправлен)
-- [ ] Игрок может завершить полный Extraction loop (дроп → таймер → эвакуация)
-- [ ] 3 босса работают с уникальными паттернами атак
-- [ ] Код разбит на модули, каждый файл < 300 строк
-- [ ] Лидерборд показывает топ-10 игроков по ore
 
 ---
 
 ## Технические ограничения
 
-- Браузерная игра, Canvas 2D (600×600px) — без WebGL, без Three.js
-- Vanilla JS → Vite (без React/Vue, только модули)
-- Cloudflare экосистема (Workers, D1, Pages) — бесплатный tier до 50K MAU
-- Web3: ethers.js v6, EIP-1193, Base Sepolia → Base Mainnet
-- Claude Code как основной агент разработки — файлы должны быть атомарными
+- Canvas 2D, 960×540 — без WebGL, без Three.js
+- Vanilla JS + Vite (ES modules, без React/Vue/wagmi)
+- Web3: **viem** (framework-agnostic, заменяет ethers.js)
+- Cloudflare экосистема: Pages, Workers, D1
+- Base Mainnet (chain ID 8453)
+- Claude Code как основной агент — файлы < 1200 строк
