@@ -141,7 +141,7 @@
   - W3.address, W3.connected, w3Toast — интерфейс НЕ менять
   - Проверка: connect wallet → видим адрес; buy ore → транзакция проходит
 
-- [ ] **B3** (Medium) — Touch controls (auto-aim + виртуальный джойстик)
+- [x] **B3** (Medium) — Touch controls (auto-aim + виртуальный джойстик)
   - Auto-aim: корабль автоматически целится в ближайшего врага (в play-фазе)
     - `G.s.aimAng = angle to nearest enemy (if exists, else keep manual)`
     - Desktop: мышь по-прежнему overrides aimAng (обратная совместимость)

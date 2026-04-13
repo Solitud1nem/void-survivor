@@ -43,6 +43,7 @@ export function mkG() {
     obs:[], cam:{x:0,y:0},
     shipId: ship.id, earnedCredits:0, lostOre:0, location:null,
     tutStep:3, tutMsg:null, tutT:0,
+    touchMode:false, joystick:{dx:0,dy:0},
 
     ore:         0,
     shopFrom:    'menu',

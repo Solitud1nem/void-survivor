@@ -243,9 +243,16 @@ function update(dt) {
   const nebulaSlowMul=s.inNebula?0.48:1.0;
   const spd=2.7*ship.spdMul*(1+0.22*s.u.spd)*nebulaSlowMul;
 
-  const worldMX=mX+G.cam.x, worldMY=mY+G.cam.y;
-  const dx=worldMX-s.x, dy=worldMY-s.y, md=Math.hypot(dx,dy);
-  if (md>5) { s.vx+=(dx/md)*spd*0.15; s.vy+=(dy/md)*spd*0.15; }
+  if(G.touchMode){
+    const jx=G.joystick.dx, jy=G.joystick.dy;
+    if(Math.abs(jx)>0.05||Math.abs(jy)>0.05){
+      s.vx+=jx*spd*0.18; s.vy+=jy*spd*0.18;
+    }
+  } else {
+    const worldMX=mX+G.cam.x, worldMY=mY+G.cam.y;
+    const dx=worldMX-s.x, dy=worldMY-s.y, md=Math.hypot(dx,dy);
+    if (md>5) { s.vx+=(dx/md)*spd*0.15; s.vy+=(dy/md)*spd*0.15; }
+  }
   s.vx*=0.83; s.vy*=0.83;
 
   let nx=s.x+s.vx, ny=s.y+s.vy;
@@ -641,7 +648,9 @@ function loop(ts) {
 // ═══════════════════════════════════════════════════════
 
 function startGame() {
+  const wasTouchMode=G.touchMode;
   G=mkG();
+  G.touchMode=wasTouchMode;
   G.location=LOCATIONS[Math.floor(Math.random()*LOCATIONS.length)];
   genWorld(G);initExtraction(G,G.location.dur);
   G.banT=3200;updHUD();
@@ -709,10 +718,50 @@ CV.addEventListener('mousemove',e=>{
   if (G.ph==='upgrade'){hovI=-1;bR.forEach((b,i)=>{if(b.act==='upgrade'&&mX>=b.x&&mX<=b.x+b.w&&mY>=b.y&&mY<=b.y+b.h)hovI=i;});}
 });
 CV.addEventListener('click',e=>{const[x,y]=cvXY(e);click(x,y);});
-CV.addEventListener('touchstart',e=>{e.preventDefault();[mX,mY]=cvXY(e.touches[0]);click(mX,mY);},{passive:false});
+
+// ── Touch: joystick + UI ──────────────────────────────
+const JOY_CX=80, JOY_CY=H-80, JOY_R=50;
+let _joyTouchId=null;
+
+function isJoyZone(x,y){ return G.touchMode&&G.ph==='play'&&Math.hypot(x-JOY_CX,y-JOY_CY)<JOY_R*1.5; }
+
+CV.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    const[x,y]=cvXY(t);
+    if(_joyTouchId===null&&isJoyZone(x,y)){
+      _joyTouchId=t.identifier;
+      const dx2=clamp((x-JOY_CX)/JOY_R,-1,1), dy2=clamp((y-JOY_CY)/JOY_R,-1,1);
+      G.joystick.dx=dx2; G.joystick.dy=dy2;
+    } else {
+      [mX,mY]=[x,y]; click(x,y);
+    }
+  }
+},{passive:false});
+
 CV.addEventListener('touchmove',e=>{
-  e.preventDefault();[mX,mY]=cvXY(e.touches[0]);
-  if(G.ph==='upgrade'){hovI=-1;bR.forEach((b,i)=>{if(b.act==='upgrade'&&mX>=b.x&&mX<=b.x+b.w&&mY>=b.y&&mY<=b.y+b.h)hovI=i;});}
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    const[x,y]=cvXY(t);
+    if(t.identifier===_joyTouchId){
+      G.joystick.dx=clamp((x-JOY_CX)/JOY_R,-1,1);
+      G.joystick.dy=clamp((y-JOY_CY)/JOY_R,-1,1);
+    } else {
+      [mX,mY]=[x,y];
+      if(G.ph==='upgrade'){hovI=-1;bR.forEach((b,i)=>{if(b.act==='upgrade'&&mX>=b.x&&mX<=b.x+b.w&&mY>=b.y&&mY<=b.y+b.h)hovI=i;});}
+    }
+  }
+},{passive:false});
+
+CV.addEventListener('touchend',e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier===_joyTouchId){ _joyTouchId=null; G.joystick.dx=0; G.joystick.dy=0; }
+  }
+},{passive:false});
+CV.addEventListener('touchcancel',e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier===_joyTouchId){ _joyTouchId=null; G.joystick.dx=0; G.joystick.dy=0; }
+  }
 },{passive:false});
 
 // ── Автопауза ─────────────────────────────────────────
@@ -743,7 +792,9 @@ function updHUD() {
   document.getElementById('xpf').style.width=(G.xpMax>0?G.xp/G.xpMax*100:0)+'%';
 }
 
-G=mkG();updHUD();
+G=mkG();
+G.touchMode=('ontouchstart' in window);
+updHUD();
 bindW3Addr(() => W3.address);
 initW3(C, { rRect, getApp: () => ({ G, mX, mY, updHUD, ptcl, ring }) });
 initRender(C, { w3DrawToast, w3DrawConnectBtn, w3DrawShopPanel }, { ptcl });

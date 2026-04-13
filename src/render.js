@@ -778,6 +778,17 @@ function drawPlay(t) {
   // ESC hint (fade после 3 сек)
   if (G.gameT<3000){C.globalAlpha=(3000-G.gameT)/3000*0.4;C.font='10px system-ui,sans-serif';C.fillStyle='#fff';C.textAlign='center';C.fillText('ESC — pause',W/2,H-26);C.globalAlpha=1;}
 
+  // Virtual joystick (touch only)
+  if (G.touchMode){
+    const jcx=80,jcy=H-80,jr=50;
+    C.globalAlpha=0.25;
+    C.beginPath();C.arc(jcx,jcy,jr,0,Math.PI*2);C.fillStyle='#ffffff';C.fill();
+    C.globalAlpha=0.5;
+    const sx=jcx+G.joystick.dx*jr*0.8, sy=jcy+G.joystick.dy*jr*0.8;
+    C.beginPath();C.arc(sx,sy,20,0,Math.PI*2);C.fillStyle='#88ccff';C.fill();
+    C.globalAlpha=1;
+  }
+
   // Tutorial tooltip
   if (G.tutMsg&&G.tutT>0){
     const a=Math.min(1,G.tutT/400);
