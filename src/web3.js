@@ -1,4 +1,5 @@
-import { ethers } from 'ethers';
+import { createWalletClient, createPublicClient, custom, http, parseEther, formatEther, getContract, decodeEventLog } from 'viem';
+import { baseSepolia } from 'viem/chains';
 import { W, H } from './config.js';
 import { META, saveMeta } from './state.js';
 
@@ -12,20 +13,25 @@ export function initW3(ctx, refs) {
 }
 
 // ── Config ────────────────────────────────────────────
+const CHAIN = baseSepolia;
+
 export const W3_CFG = {
   CONTRACT: '0x565176FAfB4046626C87982cae4a25ACa1dFCFdB',
   ABI: [
-    'function buyOre(uint256 amount) payable',
-    'function priceFor(uint256 amount) view returns (uint256)',
-    'function pricePerOre() view returns (uint256)',
-    'function paused() view returns (bool)',
-    'event OrePurchased(address indexed buyer,uint256 amount,uint256 ethPaid,uint256 timestamp)',
+    { type:'function', name:'buyOre', inputs:[{name:'amount',type:'uint256'}], outputs:[], stateMutability:'payable' },
+    { type:'function', name:'priceFor', inputs:[{name:'amount',type:'uint256'}], outputs:[{name:'',type:'uint256'}], stateMutability:'view' },
+    { type:'function', name:'pricePerOre', inputs:[], outputs:[{name:'',type:'uint256'}], stateMutability:'view' },
+    { type:'function', name:'paused', inputs:[], outputs:[{name:'',type:'bool'}], stateMutability:'view' },
+    { type:'event', name:'OrePurchased', inputs:[
+      {name:'buyer',type:'address',indexed:true},{name:'amount',type:'uint256',indexed:false},
+      {name:'ethPaid',type:'uint256',indexed:false},{name:'timestamp',type:'uint256',indexed:false}
+    ]},
   ],
-  CHAIN_ID:   84532,
-  CHAIN_NAME: 'Base Sepolia',
-  RPC:        'https://sepolia.base.org',
-  EXPLORER:   'https://sepolia.basescan.org',
-  CURRENCY:   { name:'Ether', symbol:'ETH', decimals:18 },
+  CHAIN_ID:   CHAIN.id,
+  CHAIN_NAME: CHAIN.name,
+  RPC:        CHAIN.rpcUrls.default.http[0],
+  EXPLORER:   CHAIN.blockExplorers.default.url,
+  CURRENCY:   CHAIN.nativeCurrency,
   PKGS: [
     { ore:1000,  label:'1 000 ore',  sub:'0.0001 ETH' },
     { ore:5000,  label:'5 000 ore',  sub:'0.0005 ETH' },
@@ -34,7 +40,7 @@ export const W3_CFG = {
 };
 
 // ── State ─────────────────────────────────────────────
-export const W3 = { provider:null, signer:null, contract:null, address:null, connected:false, chainOk:false };
+export const W3 = { walletClient:null, publicClient:null, contract:null, address:null, connected:false, chainOk:false };
 let _toast='', _toastCol='#44aaff', _toastLife=0;
 let _pendingBuy=null; // { ore, cost, ethStr } — Canvas confirm popup
 
@@ -48,20 +54,21 @@ export async function w3Init(){
   try{const a=await window.ethereum.request({method:'eth_accounts'});if(a.length)await w3Connect(true);}catch(e){}
 }
 
-function w3Reset(){ W3.provider=W3.signer=W3.contract=W3.address=null; W3.connected=W3.chainOk=false; }
+function w3Reset(){ W3.walletClient=W3.publicClient=W3.contract=W3.address=null; W3.connected=W3.chainOk=false; }
 
 export async function w3Connect(silent=false){
   if(typeof window.ethereum==='undefined'){ if(!silent)w3Toast('Install MetaMask or Rabby','#ff4444'); return; }
   try{
     const accs=await window.ethereum.request({method:silent?'eth_accounts':'eth_requestAccounts'});
     if(!accs.length) return;
-    W3.provider=new ethers.BrowserProvider(window.ethereum);
-    W3.signer=await W3.provider.getSigner();
-    W3.address=await W3.signer.getAddress();
-    W3.contract=new ethers.Contract(W3_CFG.CONTRACT,W3_CFG.ABI,W3.signer);
+    W3.walletClient=createWalletClient({ chain:CHAIN, transport:custom(window.ethereum) });
+    W3.publicClient=createPublicClient({ chain:CHAIN, transport:http() });
+    const [addr]=await W3.walletClient.requestAddresses();
+    W3.address=addr;
+    W3.contract=getContract({ address:W3_CFG.CONTRACT, abi:W3_CFG.ABI, client:{ public:W3.publicClient, wallet:W3.walletClient } });
     W3.connected=true;
-    const net=await W3.provider.getNetwork();
-    W3.chainOk=Number(net.chainId)===W3_CFG.CHAIN_ID;
+    const chainId=await W3.publicClient.getChainId();
+    W3.chainOk=chainId===W3_CFG.CHAIN_ID;
     if(!W3.chainOk&&!silent) await w3SwitchChain();
     w3Migrate();
     if(!silent) w3Toast('Connected: '+w3Short(W3.address),'#44ffaa');
@@ -89,8 +96,8 @@ export async function w3BuyOre(oreAmount){
   if(!W3.chainOk){ await w3SwitchChain(); return; }
   try{
     w3Toast('Fetching price…','#44aaff');
-    const cost=await W3.contract.priceFor(oreAmount);
-    const ethStr=Number(ethers.formatEther(cost)).toFixed(6);
+    const cost=await W3.contract.read.priceFor([BigInt(oreAmount)]);
+    const ethStr=Number(formatEther(cost)).toFixed(6);
     _pendingBuy={ ore:oreAmount, cost, ethStr };
   }catch(e){
     w3Toast('Error: '+(e.shortMessage||e.message||'').slice(0,48),'#ff4444');
@@ -103,15 +110,19 @@ export async function w3ConfirmBuy(){
   _pendingBuy=null;
   try{
     w3Toast('Sending…','#44aaff');
-    const tx=await W3.contract.buyOre(ore,{value:cost});
+    const hash=await W3.contract.write.buyOre([BigInt(ore)],{value:cost, account:W3.address});
     w3Toast('Confirming…','#44aaff');
-    const receipt=await tx.wait();
-    const iface=new ethers.Interface(W3_CFG.ABI);
+    const receipt=await W3.publicClient.waitForTransactionReceipt({hash});
     let got=0n;
-    for(const log of receipt.logs){try{const p=iface.parseLog(log);if(p?.name==='OrePurchased'){got=p.args.amount;break;}}catch{}}
+    for(const log of receipt.logs){
+      try{
+        const decoded=decodeEventLog({abi:W3_CFG.ABI,data:log.data,topics:log.topics});
+        if(decoded.eventName==='OrePurchased'){got=decoded.args.amount;break;}
+      }catch{}
+    }
     w3Credit(got>0n?Number(got):ore);
   }catch(e){
-    if(e.code===4001||e.code==='ACTION_REJECTED') w3Toast('Cancelled','#ffaa44');
+    if(e.name==='UserRejectedRequestError'||e.code===4001) w3Toast('Cancelled','#ffaa44');
     else w3Toast('Error: '+(e.shortMessage||e.message||'').slice(0,48),'#ff4444');
   }
 }
