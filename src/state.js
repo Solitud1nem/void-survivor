@@ -4,13 +4,14 @@ import { W, H, WSX, WSY, XP_BASE, SCAN_MAX, SHIPS } from './config.js';
 
 function loadMeta() {
   try { const r=localStorage.getItem('vs_meta'); if(r) return JSON.parse(r); } catch(e) {}
-  return { credits:0, ore:0, owned:['vanguard'], selected:'vanguard', hi:0 };
+  return { credits:0, ore:0, owned:['vanguard'], selected:'vanguard', hi:0, firstTime:true };
 }
 
 export let META = loadMeta();
 if (!META.owned.includes('vanguard')) META.owned.push('vanguard');
 if (!META.selected) META.selected='vanguard';
 if (META.ore === undefined) META.ore = 0;
+if (META.firstTime === undefined) META.firstTime = true;
 
 // w3Addr: функция, возвращающая текущий адрес кошелька (или null)
 let _w3Addr = () => null;
@@ -41,6 +42,7 @@ export function mkG() {
     boss:null, bossCount:0, spawnT:0, synergy:null,
     obs:[], cam:{x:0,y:0},
     shipId: ship.id, earnedCredits:0, lostOre:0, location:null,
+    tutStep:3, tutMsg:null, tutT:0,
 
     ore:         0,
     shopFrom:    'menu',

@@ -50,7 +50,7 @@
   - `G.ph` менять не нужно — попап рисуется поверх текущей фазы
   - Проверка: кнопка покупки → Canvas-попап с суммой, кнопки Confirm/Cancel
 
-- [ ] **S4** (Medium) — First-run onboarding: pre-game screen + contextual tooltips
+- [x] **S4** (Medium) — First-run onboarding: pre-game screen + contextual tooltips
   - **state.js:** добавить в META `firstTime: true`
     - Обратная совместимость: `META.firstTime === undefined` → считать как `true`
     - `saveMeta()` сохраняет флаг автоматически
@@ -89,11 +89,11 @@
 
 ## 🚀 DEPLOY SPRINT
 
-- [ ] **D1** (Simple) — Merge vite-v6 → main
+- [x] **D1** (Simple) — Merge vite-v6 → main
   - `git checkout main && git merge vite-v6 && git push`
   - Проверка: ветка main содержит все src/ модули
 
-- [ ] **D2** (Simple) — Cloudflare Pages деплой
+- [x] **D2** (Simple) — Cloudflare Pages деплой
   - `wrangler pages project create void-survivor`
   - Build: `npm run build` / Output: `dist`
   - Подключить к ветке main → push = автодеплой
@@ -129,7 +129,7 @@
 > Делать после Deploy Sprint. Цель: игра доступна через Base App (join.base.app).
 > После April 9, 2026 — Base App = стандартный web app, Farcaster не нужен.
 
-- [ ] **B2** (Medium) — Миграция web3.js: ethers.js v6 → viem
+- [x] **B2** (Medium) — Миграция web3.js: ethers.js v6 → viem
   - `npm install viem` / `npm uninstall ethers`
   - Переписать src/web3.js (~222 строки):
     - `BrowserProvider` → `createWalletClient({ chain: base, transport: custom(window.ethereum) })`

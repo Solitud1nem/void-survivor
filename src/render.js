@@ -662,7 +662,11 @@ function drawMenu(t) {
   rRect(hx,hy,hw,hh,9);C.fillStyle=hhv?'#1a2a3a':'#0d1824';C.fill();C.strokeStyle='#1e3a5a';C.lineWidth=1;C.stroke();
   C.font='500 14px system-ui,sans-serif';C.fillStyle=hhv?'#88ccff':'#4488aa';C.fillText('HANGAR',W/2,hy+hh/2);
   if (META.hi>0){C.font='12px system-ui,sans-serif';C.fillStyle='#ffdd44';C.fillText('best: '+META.hi.toLocaleString(),W/2,hy+hh+22);}
-  bR=[{x:px,y:py,w:pw,h:ph2,act:'play'},{x:hx,y:hy,w:hw,h:hh,act:'shop'}];
+  const htw=120,hth=28,htx=W/2-htw/2,hty=hy+hh+(META.hi>0?36:16);
+  const hthv=mX>=htx&&mX<=htx+htw&&mY>=hty&&mY<=hty+hth;
+  C.font='11px system-ui,sans-serif';C.fillStyle=hthv?'#88ccff':'#335566';
+  C.fillText('How to play',W/2,hty+hth/2);
+  bR=[{x:px,y:py,w:pw,h:ph2,act:'play'},{x:hx,y:hy,w:hw,h:hh,act:'shop'},{x:htx,y:hty,w:htw,h:hth,act:'howtoplay'}];
   // Web3 кнопка
   bR.push(w3DrawConnectBtn());
 }
@@ -774,6 +778,16 @@ function drawPlay(t) {
   // ESC hint (fade после 3 сек)
   if (G.gameT<3000){C.globalAlpha=(3000-G.gameT)/3000*0.4;C.font='10px system-ui,sans-serif';C.fillStyle='#fff';C.textAlign='center';C.fillText('ESC — pause',W/2,H-26);C.globalAlpha=1;}
 
+  // Tutorial tooltip
+  if (G.tutMsg&&G.tutT>0){
+    const a=Math.min(1,G.tutT/400);
+    C.globalAlpha=a;
+    rRect(W/2-140,H-60,280,32,8);C.fillStyle='rgba(4,12,24,0.85)';C.fill();
+    C.strokeStyle='#44aaff';C.lineWidth=1;C.stroke();
+    C.font='500 13px system-ui,sans-serif';C.fillStyle='#fff';
+    C.textAlign='center';C.textBaseline='middle';C.fillText(G.tutMsg,W/2,H-44);
+    C.globalAlpha=1;
+  }
 }
 
 // ─── PAUSE ─────────────────────────────────────────────
@@ -959,6 +973,47 @@ function drawFailed(t) {
   bR=[{x:bx,y:by,w:bw,h:bh,act:'play'},{x:hx,y:hy,w:hw,h:hh,act:'shop'}];
 }
 
+// ── Tutorial screen ──────────────────────────────────
+function drawTutorial() {
+  drawBGStatic(0);
+  C.textAlign='center';C.textBaseline='middle';
+
+  C.font='500 28px system-ui,sans-serif';C.fillStyle='#fff';
+  C.fillText('HOW TO SURVIVE',W/2,H/2-120);
+
+  // 3 columns
+  const cols=[
+    {icon:'\u{1F5B1}',title:'AIM & FLY',desc:'Move cursor','desc2':'to navigate'},
+    {icon:'SPACE',title:'SCAN ORE',desc:'Press SPACE','desc2':'to reveal ore'},
+    {icon:'\u{1F7E2}',title:'EXTRACT',desc:'Reach the','desc2':'green zone'},
+  ];
+  const cw=200,cx0=W/2-cw*1.5+cw/2;
+  cols.forEach((c,i)=>{
+    const x=cx0+i*cw*1.05;
+    C.font='32px system-ui,sans-serif';C.fillStyle='#ffffff88';
+    C.fillText(c.icon,x,H/2-55);
+    C.font='500 14px system-ui,sans-serif';C.fillStyle='#44aaff';
+    C.fillText(c.title,x,H/2-18);
+    C.font='12px system-ui,sans-serif';C.fillStyle='#ffffff66';
+    C.fillText(c.desc,x,H/2+4);
+    C.fillText(c.desc2,x,H/2+20);
+  });
+
+  // Buttons
+  const bw=170,bh=46,gap=20;
+  const bx1=W/2-bw-gap/2,bx2=W/2+gap/2,by=H/2+60;
+  const hv1=mX>=bx1&&mX<=bx1+bw&&mY>=by&&mY<=by+bh;
+  const hv2=mX>=bx2&&mX<=bx2+bw&&mY>=by&&mY<=by+bh;
+  rRect(bx1,by,bw,bh,9);C.fillStyle=hv1?'#2277cc':'#1155aa';C.fill();
+  C.font='500 15px system-ui,sans-serif';C.fillStyle='#fff';
+  C.fillText('PLAY',bx1+bw/2,by+bh/2);
+  rRect(bx2,by,bw,bh,9);C.fillStyle=hv2?'#1a2a3a':'#0d1824';C.fill();
+  C.strokeStyle='#1e3a5a';C.lineWidth=1;C.stroke();
+  C.font='500 15px system-ui,sans-serif';C.fillStyle=hv2?'#88ccff':'#4488aa';
+  C.fillText('SKIP',bx2+bw/2,by+bh/2);
+  bR=[{x:bx1,y:by,w:bw,h:bh,act:'firstRun'},{x:bx2,y:by,w:bw,h:bh,act:'skipTutorial'}];
+}
+
 // ── Error screen ─────────────────────────────────────
 function drawError() {
   C.fillStyle='#0a0a12';C.fillRect(0,0,W,H);
@@ -986,7 +1041,8 @@ export function draw(ts, app) {
 
   C.save();
   if (G.shT>0)C.translate(G.shX,G.shY);
-  if      (G.ph==='menu')    drawMenu(ts);
+  if      (G.ph==='menu')     drawMenu(ts);
+  else if (G.ph==='tutorial') drawTutorial();
   else if (G.ph==='play')    drawPlay(ts);
   else if (G.ph==='pause')   drawPause(ts);
   else if (G.ph==='upgrade') drawUpgrade(ts);

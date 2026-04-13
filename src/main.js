@@ -151,6 +151,22 @@ function update(dt) {
   G.flT=Math.max(0,G.flT-dt); G.shT=Math.max(0,G.shT-dt);
   if (G.shT<=0) { G.shX=0; G.shY=0; }
   G.gameT+=dt; G.banT=Math.max(0,G.banT-dt);
+
+  // ── Tutorial tooltips ──
+  if(G.tutStep<3){
+    if(G.tutT>0) G.tutT=Math.max(0,G.tutT-dt);
+    if(G.tutT<=0) G.tutMsg=null;
+    if(G.tutStep===0&&G.gameT>500){
+      G.tutMsg='Move cursor to fly';G.tutT=4000;G.tutStep=1;
+    }
+    if(G.tutStep===1){
+      const near=G.obs.some(o=>d2(G.s,o)<200);
+      if(near){G.tutMsg='SPACE \u2014 scan for ore';G.tutT=4000;G.tutStep=2;}
+    }
+    if(G.tutStep===2&&G.ore>0){
+      G.tutMsg='Reach Extraction Zone \u2192';G.tutT=5000;G.tutStep=3;
+    }
+  }
   if (G.chainFl) { G.chainFl.life-=dt/280; if(G.chainFl.life<=0) G.chainFl=null; }
 
   // Скан пульс — анимация кольца
@@ -628,7 +644,9 @@ function startGame() {
   G=mkG();
   G.location=LOCATIONS[Math.floor(Math.random()*LOCATIONS.length)];
   genWorld(G);initExtraction(G,G.location.dur);
-  G.banT=3200;G.ph='play';updHUD();
+  G.banT=3200;updHUD();
+  if(META.firstTime){ G.ph='tutorial'; }
+  else { G.ph='play'; }
 }
 
 function toggleFullscreen() {
@@ -664,6 +682,11 @@ function click(x,y) {
         G.ph='play';updHUD();
       }
       else if (b.act==='scan')    doScan();
+      else if (b.act==='firstRun'||b.act==='skipTutorial'){
+        if(META.firstTime){ META.firstTime=false;saveMeta();G.tutStep=0;G.ph='play'; }
+        else { G.ph='menu'; }
+      }
+      else if (b.act==='howtoplay')   { G.ph='tutorial'; }
       else if (b.act==='fullscreen') toggleFullscreen();
       else if (b.act==='w3connect') w3Connect();
       else if (b.act==='w3switch')  w3SwitchChain();
