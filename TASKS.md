@@ -99,18 +99,20 @@
   - Подключить к ветке main → push = автодеплой
   - Проверка: игра открывается на `void-survivor.pages.dev`
 
-- [ ] **D3 + B1** (Simple) — Домен + base.dev регистрация
-  - D3: купить voidsurvivor.xyz → DNS → Cloudflare → SSL
-  - B1: создать проект на https://base.dev:
+- [x] **B1** (Simple) — base.dev регистрация
+  - Зарегистрировали app на https://base.dev:
     - name: "Void Survivor"
     - tagline: "Extract ore. Survive the void."
-    - category: gaming
-    - primary URL: https://voidsurvivor.xyz
-    - icon 512×512, screenshots (portrait, для мобайла)
-    - builder code (генерируется на base.dev)
-  - Проверка: игра открывается по домену; проект виден на base.dev
+    - domain: void-survivor.pages.dev
+    - Верификация через meta tag `<meta name="base:app_id" content="69dcdacd2c63bda05673178a">`
+  - Проверка: проект виден на base.dev ✅
 
-- [ ] **D4** (Medium) — Base Mainnet деплой контракта
+- [ ] **D3** (Simple) — Домен
+  - Купить voidsurvivor.xyz → DNS → Cloudflare → SSL
+  - Обновить URL на base.dev
+  - Проверка: игра открывается по домену
+
+- [x] **D4** (Medium) — Base Mainnet деплой контракта
   - Slither: `slither contracts/VoidOreMinter.sol` → исправить critical findings
   - Деплой через Remix на Base Mainnet (chain ID 8453)
   - Верификация на basescan.org
@@ -154,15 +156,13 @@
   - Проверка: открыть на мобильном браузере → джойстик виден, корабль движется,
     стреляет автоматически
 
-- [ ] **B4** (Medium) — Paymaster (gasless транзакции)
-  - Зарегистрироваться на https://coinbase.com/cloud → CDP
-  - Создать Paymaster политику для VoidOreMinter на Base Mainnet
-  - Добавить в web3.js Paymaster URL при создании walletClient:
-    ```js
-    import { http } from 'viem';
-    // Paymaster sponsorUserOperation hook через viem paymasterClient
-    ```
-  - Проверка: buy ore → MetaMask не запрашивает ETH на газ
+- [x] **B4** (Medium) — Paymaster (gasless транзакции)
+  - CDP Paymaster настроен на https://portal.cdp.coinbase.com:
+    - Gas policy: $1 max, $0.01/user, 50 ops/user, monthly cycle
+    - Contract: 0x349465738d1ec4a3e4d63c8608ab216dee93b2dd, method: buyOre(uint256)
+  - web3.js: EIP-5792 sendCalls + paymasterService, fallback на обычный tx
+  - Coinbase Wallet → gasless; MetaMask/Rabby → обычный газ (fallback)
+  - Проверка: buy ore через Rabby — работает ✅
 
 ---
 
