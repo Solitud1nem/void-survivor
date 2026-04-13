@@ -1,5 +1,5 @@
 import { createWalletClient, createPublicClient, custom, http, parseEther, formatEther, getContract, decodeEventLog } from 'viem';
-import { baseSepolia } from 'viem/chains';
+import { base } from 'viem/chains';
 import { W, H } from './config.js';
 import { META, saveMeta } from './state.js';
 
@@ -13,10 +13,10 @@ export function initW3(ctx, refs) {
 }
 
 // ── Config ────────────────────────────────────────────
-const CHAIN = baseSepolia;
+const CHAIN = base;
 
 export const W3_CFG = {
-  CONTRACT: '0x565176FAfB4046626C87982cae4a25ACa1dFCFdB',
+  CONTRACT: '0x349465738d1ec4a3e4d63c8608ab216dee93b2dd',
   ABI: [
     { type:'function', name:'buyOre', inputs:[{name:'amount',type:'uint256'}], outputs:[], stateMutability:'payable' },
     { type:'function', name:'priceFor', inputs:[{name:'amount',type:'uint256'}], outputs:[{name:'',type:'uint256'}], stateMutability:'view' },
