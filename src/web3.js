@@ -1,4 +1,4 @@
-import { createWalletClient, createPublicClient, custom, http, parseEther, formatEther, getContract, decodeEventLog } from 'viem';
+import { createWalletClient, createPublicClient, custom, http, parseEther, formatEther, getContract, decodeEventLog, encodeFunctionData } from 'viem';
 import { base } from 'viem/chains';
 import { W, H } from './config.js';
 import { META, saveMeta } from './state.js';
@@ -14,6 +14,7 @@ export function initW3(ctx, refs) {
 
 // ── Config ────────────────────────────────────────────
 const CHAIN = base;
+const PAYMASTER_URL = 'https://api.developer.coinbase.com/rpc/v1/base/bK4VcPtVF7EjaG1nOTpOBDK0RxC3Dwh8';
 
 export const W3_CFG = {
   CONTRACT: '0x349465738d1ec4a3e4d63c8608ab216dee93b2dd',
@@ -110,9 +111,27 @@ export async function w3ConfirmBuy(){
   _pendingBuy=null;
   try{
     w3Toast('Sending…','#44aaff');
-    const hash=await W3.contract.write.buyOre([BigInt(ore)],{value:cost, account:W3.address});
-    w3Toast('Confirming…','#44aaff');
-    const receipt=await W3.publicClient.waitForTransactionReceipt({hash});
+    let receipt;
+    try{
+      // Gasless via EIP-5792 (Coinbase Wallet + CDP Paymaster)
+      const callsId=await W3.walletClient.sendCalls({
+        account:W3.address,
+        calls:[{
+          to:W3_CFG.CONTRACT,
+          data:encodeFunctionData({abi:W3_CFG.ABI,functionName:'buyOre',args:[BigInt(ore)]}),
+          value:cost
+        }],
+        capabilities:{ paymasterService:{ url:PAYMASTER_URL } }
+      });
+      w3Toast('Confirming…','#44aaff');
+      receipt=await _pollCalls(callsId);
+    }catch(e){
+      if(e.name==='UserRejectedRequestError'||e.code===4001) throw e;
+      // Fallback: regular tx (MetaMask, wallets without EIP-5792)
+      const hash=await W3.contract.write.buyOre([BigInt(ore)],{value:cost, account:W3.address});
+      w3Toast('Confirming…','#44aaff');
+      receipt=await W3.publicClient.waitForTransactionReceipt({hash});
+    }
     let got=0n;
     for(const log of receipt.logs){
       try{
@@ -125,6 +144,15 @@ export async function w3ConfirmBuy(){
     if(e.name==='UserRejectedRequestError'||e.code===4001) w3Toast('Cancelled','#ffaa44');
     else w3Toast('Error: '+(e.shortMessage||e.message||'').slice(0,48),'#ff4444');
   }
+}
+
+async function _pollCalls(id){
+  for(let i=0;i<60;i++){
+    const res=await W3.walletClient.getCallsStatus({id});
+    if(res.status==='CONFIRMED'&&res.receipts?.length) return res.receipts[0];
+    await new Promise(r=>setTimeout(r,2000));
+  }
+  throw new Error('Transaction timeout');
 }
 
 export function w3CancelBuy(){ _pendingBuy=null; }
