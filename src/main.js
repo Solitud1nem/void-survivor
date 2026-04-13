@@ -709,8 +709,9 @@ function click(x,y) {
 }
 
 function cvXY(e) {
-  const r=CV.getBoundingClientRect(),s=W/r.width;
-  return[(e.clientX-r.left)*s,(e.clientY-r.top)*s];
+  const r=CV.getBoundingClientRect();
+  const sx=W/r.width, sy=H/r.height;
+  return[(e.clientX-r.left)*sx,(e.clientY-r.top)*sy];
 }
 
 CV.addEventListener('mousemove',e=>{
